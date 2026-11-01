@@ -462,6 +462,295 @@ export function GameView(gameId) {
     });
   }
 
+  function importModal() {
+    // Import en masse : liste collée, fichier (txt/csv/json) ou recherche IA.
+    // Les sections « == Nom == » ou « # Nom » découpent la liste en éditions
+    // (ex. jeu de base vs DLC) : chaque édition est ensuite activable
+    // indépendamment dans les tirages.
+    let mode = 'liste';
+
+    const tabBtns = h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px' });
+    const panes = { liste: h('div', { class: 'stack' }), fichier: h('div', { class: 'stack' }), ia: h('div', { class: 'stack' }) };
+
+    const ta = h('textarea', {
+      class: 'textarea', rows: 8, 'data-testid': 'textarea-import',
+      placeholder: 'Un circuit par ligne.\n\nPour découper la liste en éditions (ex. jeu de base / DLC), commencez un groupe par une ligne :\n== Jeu de base ==\n== Pass circuits ==\n\nLa numérotation (1. 2. 3.) est retirée automatiquement.',
+    });
+    ta.addEventListener('input', refresh);
+
+    const fileInput = h('input', {
+      type: 'file', class: 'input', 'data-testid': 'input-import-file',
+      accept: '.txt,.csv,.json,text/plain,text/csv,application/json',
+    });
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      try {
+        let text = await readFile(file);
+        if (/\.json$/i.test(file.name)) {
+          const data = JSON.parse(text);
+          const lines = [];
+          const emit = (arr) => arr.forEach((x) => {
+            const name = typeof x === 'string' ? x : (x.name || x.nom || x.circuit || x.title);
+            if (name) lines.push(String(name));
+          });
+          if (Array.isArray(data)) {
+            const withEd = data.filter((x) => x && typeof x === 'object' && Array.isArray(x.editions));
+            if (withEd.length) {
+              withEd.forEach((g) => {
+                if (g.name) lines.push('== ' + g.name + ' ==');
+                emit(g.editions || []);
+                if (g.contents) emit(g.contents);
+              });
+            } else emit(data);
+          } else if (data && Array.isArray(data.editions)) {
+            data.editions.forEach((ed) => {
+              if (ed.name) lines.push('== ' + ed.name + ' ==');
+              emit(ed.contents || []);
+            });
+          } else if (data && Array.isArray(data.contents)) {
+            emit(data.contents);
+          }
+          text = lines.join('\n');
+        } else if (/\.csv$/i.test(file.name)) {
+          text = text.split(/\r?\n/).map((l) => {
+            const cells = l.split(/[;,]/);
+            return (cells[0] || '').replace(/^["']|["']$/g, '').trim();
+          }).filter(Boolean).join('\n');
+        }
+        ta.value = text;
+        setMode('liste');
+        refresh();
+        toast('Fichier chargé : ' + file.name);
+      } catch (e) {
+        toast('Fichier illisible (txt, csv ou json attendu)', 'err');
+      }
+      fileInput.value = '';
+    });
+
+    // ---- Onglet IA : prompt pré-construit ----
+    const aiGame = h('input', { class: 'input', type: 'text', value: game.name, 'aria-label': 'Nom du jeu' });
+    const aiPlatform = h('input', { class: 'input', type: 'text', value: game.platform || '', 'aria-label': 'Plateforme' });
+    const aiPrompt = h('textarea', { class: 'textarea', rows: 10, readonly: 'readonly', 'data-testid': 'textarea-ai-prompt' });
+    function buildPrompt() {
+      const p = aiPlatform.value.trim() ? ' (' + aiPlatform.value.trim() + ')' : '';
+      aiPrompt.value =
+        'Liste-moi TOUS les circuits de « ' + (aiGame.value.trim() || game.name) + ' »' + p + ' : jeu de base, DLC et mises à jour inclus, dans l\u2019ordre officiel, avec les noms français exacts.\n\n' +
+        'Format attendu (pour import dans une application, respecte-le exactement) :\n' +
+        '- une ligne « == Nom de l\u2019édition == » au début de chaque groupe (ex. « == Jeu de base == », « == Pass circuits == », « == Mise à jour X == ») ;\n' +
+        '- puis un circuit par ligne, sans numérotation ni ponctuation ;\n' +
+        '- préfixe par « ? » les circuits dont tu n\u2019es pas certain du nom exact.\n\n' +
+        'Termine par la liste de tes sources (pages exactes consultées) et la date du jour. Rien d\u2019autre.';
+    }
+    aiGame.addEventListener('input', buildPrompt);
+    aiPlatform.addEventListener('input', buildPrompt);
+    buildPrompt();
+    const copyBtn = h('button', {
+      class: 'btn btn-outline btn-block', 'data-testid': 'button-copy-prompt',
+      onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(aiPrompt.value);
+          toast('Prompt copié — collez-le dans votre IA');
+        } catch (e) {
+          aiPrompt.select();
+          try { document.execCommand('copy'); toast('Prompt copié'); }
+          catch (e2) { toast('Copie impossible : sélectionnez le texte manuellement', 'err'); }
+        }
+      },
+    }, 'Copier le prompt');
+    const searchBtn = h('button', {
+      class: 'btn btn-primary btn-block', 'data-testid': 'button-open-ai',
+      onclick: () => {
+        const url = 'https://www.perplexity.ai/search?q=' + encodeURIComponent(aiPrompt.value);
+        const w = window.open(url, '_blank');
+        if (!w) toast('Ouverture bloquée — copiez le prompt et ouvrez votre IA', 'err');
+      },
+    }, 'Lancer la recherche (Perplexity)');
+
+    // ---- Analyse de la liste ----
+    function parseList(text) {
+      const groups = [];
+      let cur = null;
+      for (const raw of String(text).split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line) continue;
+        const m = line.match(/^(?:=+|#+)\s*(.*?)\s*(?:=+|#+)?$/);
+        if (m && /^[=#]/.test(line)) {
+          const gname = m[1].replace(/[=#]/g, '').trim();
+          if (gname) { cur = { name: gname, contents: [] }; groups.push(cur); }
+          continue;
+        }
+        const name = line.replace(/^\d+\s*[.)\-:]\s*/, '').replace(/^\?\s*/, '').trim();
+        if (!name) continue;
+        if (!cur) { cur = { name: null, contents: [] }; groups.push(cur); }
+        cur.contents.push(name);
+      }
+      return groups;
+    }
+
+    // Cible quand la liste n'a pas de sections
+    const edSel = h('select', { class: 'select', 'aria-label': 'Édition cible', 'data-testid': 'select-target-edition' });
+    const newEdName = h('input', { class: 'input', type: 'text', placeholder: 'Nom de la nouvelle édition…' });
+    const newEdDlc = h('input', { type: 'checkbox' });
+    const statusSel = h('select', { class: 'select', 'aria-label': 'Statut' },
+      h('option', { value: 'verified' }, 'Vérifié'),
+      h('option', { value: 'unverified' }, 'À vérifier')
+    );
+    const sourceInput = h('input', { class: 'input', type: 'text', placeholder: 'Ex. : IA Perplexity, wiki…', value: '' });
+    const previewBox = h('div', { class: 'stack' });
+    const importBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-import' }, 'Importer');
+
+    function refreshEdSel() {
+      edSel.innerHTML = '';
+      game.editions.forEach((ed) => {
+        const o = h('option', { value: ed.id }, ed.name + ' (' + ed.contents.length + ')');
+        edSel.append(o);
+      });
+      edSel.append(h('option', { value: '__new__' }, '➕ Nouvelle édition…'));
+      edSel.value = game.editions[0] ? game.editions[0].id : '__new__';
+      edSel.dispatchEvent(new Event('change'));
+    }
+    let targetNew = false;
+    edSel.addEventListener('change', () => {
+      targetNew = edSel.value === '__new__';
+      newEdName.style.display = targetNew ? '' : 'none';
+      if (newEdDlc.parentElement) newEdDlc.parentElement.style.display = targetNew ? '' : 'none';
+    });
+
+    function refresh() {
+      const parsed = parseList(ta.value);
+      const hasSections = parsed.some((g) => g.name);
+      previewBox.innerHTML = '';
+      const total = parsed.reduce((s, g) => s + g.contents.length, 0);
+      importBtn.disabled = total === 0;
+
+      if (!total) {
+        previewBox.append(h('p', { class: 'sub', style: 'text-align:center' }, 'Rien à importer pour l\u2019instant.'));
+        return;
+      }
+      previewBox.append(h('span', { class: 'field-label' }, 'Aperçu — ' + total + ' contenu(s)'));
+      parsed.forEach((g) => {
+        const existing = new Set(game.editions.flatMap((e) => e.contents.map((c) => c.name.toLowerCase())));
+        previewBox.append(h('div', { class: 'card', style: 'padding:10px 12px' },
+          h('div', { class: 'spread' },
+            h('strong', { style: 'font-size:.9rem' }, g.name ? '== ' + g.name + ' ==' : 'Sans section → édition cible'),
+            h('span', { class: 'badge' }, g.contents.length + ' circuits')
+          ),
+          h('div', { class: 'sub', style: 'margin-top:4px' },
+            g.contents.slice(0, 8).map((n) => existing.has(n.toLowerCase()) ? n + ' (doublon)' : n).join(' · ') +
+            (g.contents.length > 8 ? ' · …' : '')
+          )
+        ));
+      });
+      const nDup = parsed.reduce((s, g) => s + g.contents.filter((n) =>
+        game.editions.some((e) => e.contents.some((c) => c.name.toLowerCase() === n.toLowerCase()))).length, 0);
+      previewBox.append(h('p', { class: 'sub' },
+        (hasSections
+          ? 'Les sections créeront (ou réutiliseront) une édition chacune — vous pourrez les activer/désactiver séparément dans les tirages. '
+          : 'Tous les contenus iront dans l\u2019édition cible. ') +
+        (nDup ? nDup + ' doublon(s) seront ignorés.' : '')));
+    }
+
+    function setMode(m) {
+      mode = m;
+      tabBtns.innerHTML = '';
+      [['liste', 'Coller une liste'], ['fichier', 'Fichier'], ['ia', 'Recherche IA']].forEach(([k, label]) => {
+        tabBtns.append(h('button', {
+          class: 'btn btn-sm ' + (k === mode ? 'btn-primary' : 'btn-ghost'),
+          'data-testid': 'tab-import-' + k,
+          onclick: () => setMode(k),
+        }, label));
+      });
+      Object.entries(panes).forEach(([k, el]) => (el.style.display = k === mode ? '' : 'none'));
+    }
+    setMode('liste');
+    refreshEdSel();
+
+    panes.liste.append(
+      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Liste des circuits'), ta),
+      h('div', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Édition cible (sans sections)'),
+        edSel,
+        targetNew ? h('div', { class: 'row', style: 'margin-top:8px' }, newEdName) : null,
+        h('label', { class: 'content-row', style: 'cursor:pointer;margin-top:6px' },
+          newEdDlc, h('span', { class: 'content-name' }, 'Nouvelle édition = DLC / extension'))
+      )
+    );
+    panes.fichier.append(
+      h('label', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Fichier .txt, .csv ou .json'),
+        fileInput
+      ),
+      h('p', { class: 'sub' }, 'Txt : un circuit par ligne · CSV : première colonne · JSON : liste de noms, ou {editions: [{name, contents}]} pour importer les découpes d\u2019un coup. Le contenu du fichier est chargé dans l\u2019onglet « Coller une liste ».')
+    );
+    panes.ia.append(
+      h('div', { class: 'row' },
+        h('label', { class: 'field', style: 'flex:1' }, h('span', { class: 'field-label' }, 'Jeu'), aiGame),
+        h('label', { class: 'field', style: 'flex:1' }, h('span', { class: 'field-label' }, 'Plateforme'), aiPlatform)
+      ),
+      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Prompt prêt à l\u2019emploi'), aiPrompt),
+      copyBtn,
+      searchBtn,
+      h('p', { class: 'sub' }, 'La recherche ouvre Perplexity avec ce prompt. Copiez ensuite la réponse (un circuit par ligne) dans l\u2019onglet « Coller une liste » — le statut « À vérifier » est pensé pour ça.')
+    );
+
+    importBtn.addEventListener('click', () => {
+      const parsed = parseList(ta.value);
+      if (!parsed.length) return;
+      let targetEd = null;
+      if (edSel.value === '__new__') {
+        targetEd = { id: newId('e'), name: newEdName.value.trim() || 'Nouvelle édition', dlc: newEdDlc.checked, active: true, contents: [] };
+        game.editions.push(targetEd);
+      } else {
+        targetEd = game.editions.find((e) => e.id === edSel.value);
+      }
+      const status = statusSel.value;
+      const source = sourceInput.value.trim() || 'Import en masse';
+      // Doublons détectés à l'échelle du jeu entier (cohérent avec l'aperçu).
+      const gameExisting = new Set(game.editions.flatMap((e) => e.contents.map((c) => c.name.toLowerCase())));
+      let added = 0, dup = 0, newEds = 0;
+      const createdTarget = targetNew;
+      if (createdTarget) newEds++;
+      for (const g of parsed) {
+        let ed = targetEd;
+        if (g.name) {
+          ed = game.editions.find((e) => e.name.toLowerCase() === g.name.toLowerCase());
+          if (!ed) {
+            ed = { id: newId('e'), name: g.name, dlc: /dlc|pass|extension|mise à jour|update/i.test(g.name), active: true, contents: [] };
+            game.editions.push(ed);
+            newEds++;
+          }
+        }
+        if (!ed) continue;
+        for (const name of g.contents) {
+          if (gameExisting.has(name.toLowerCase())) { dup++; continue; }
+          ed.contents.push({ id: newId('c'), name, tags: [], status, active: true, source });
+          gameExisting.add(name.toLowerCase());
+          added++;
+        }
+      }
+      saveGame();
+      close();
+      toast(added + ' contenu(s) importé(s)' + (newEds ? ' · ' + newEds + ' édition(s) créée(s)' : '') + (dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''));
+    });
+
+    const close = modal({
+      title: 'Importer des circuits — ' + game.name,
+      body: h('div', { class: 'stack' },
+        tabBtns,
+        panes.liste, panes.fichier, panes.ia,
+        h('div', { class: 'row', style: 'flex-wrap:wrap;gap:10px' },
+          h('label', { class: 'field', style: 'flex:1;min-width:130px' }, h('span', { class: 'field-label' }, 'Statut des imports'), statusSel),
+          h('label', { class: 'field', style: 'flex:2;min-width:180px' }, h('span', { class: 'field-label' }, 'Source'), sourceInput)
+        ),
+        previewBox,
+        importBtn
+      ),
+      actions: [{ label: 'Fermer' }],
+    });
+    refresh();
+  }
+
   function addEditionModal() {
     const name = h('input', { class: 'input', type: 'text', placeholder: 'Ex. : Extension, DLC, liste maison…' });
     const dlc = h('input', { type: 'checkbox' });
@@ -538,8 +827,9 @@ export function GameView(gameId) {
         : h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { game.archived = true; saveGame(); toast('Jeu archivé — l\u2019historique est préservé'); } }, 'Archiver')
     ),
     h('div', { class: 'row' },
-      h('button', { class: 'btn btn-primary', 'data-testid': 'button-add-edition', onclick: addEditionModal }, '+ Nouvelle édition'),
-      h('span', { class: 'sub' }, 'Une édition = une liste de contenus activable indépendamment.')
+      h('button', { class: 'btn btn-primary', 'data-testid': 'button-import-contents', onclick: importModal }, '📥 Importer des circuits'),
+      h('button', { class: 'btn btn-outline', 'data-testid': 'button-add-edition', onclick: addEditionModal }, '+ Nouvelle édition'),
+      h('span', { class: 'sub' }, 'Une édition = une liste de contenus activable indépendamment dans les tirages.')
     ),
     h('div', { class: 'stack' },
       game.editions.map((ed) => {
@@ -593,8 +883,10 @@ export function GameView(gameId) {
                   s.grandPrix.some((g) => g.races.some((r) => r.contentId === c.id))
                 );
                 return h('div', { class: 'content-row' + (c.status === 'archived' ? ' archived' : '') },
-                  h('span', { class: 'content-name' }, c.name),
-                  c.source ? h('span', { class: 'sub', style: 'font-size:.72rem;max-width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: c.source }, c.source) : null,
+                  h('div', { style: 'flex:1;min-width:0' },
+                    h('span', { class: 'content-name', style: 'display:block' }, c.name),
+                    c.source ? h('span', { class: 'sub', style: 'font-size:.72rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', title: c.source }, c.source) : null
+                  ),
                   h('span', { class: 'badge ' + cls }, label),
                   h('button', {
                     class: 'switch' + (c.active ? ' on' : ''),
