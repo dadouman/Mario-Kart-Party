@@ -168,14 +168,19 @@ let saveTimer = null;
 export function save() {
   if (!persistent) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch (e) {
-      // quota dépassé : on tente une sauvegarde synchrone immédiate
-      console.error('Sauvegarde impossible', e);
-    }
-  }, 120);
+  saveTimer = setTimeout(flushSave, 120);
+}
+
+export function flushSave() {
+  clearTimeout(saveTimer);
+  if (!persistent) return true; // Repli mémoire dans l'aperçu intégré.
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+    return true;
+  } catch (e) {
+    console.error('Sauvegarde impossible', e);
+    return false;
+  }
 }
 
 load();

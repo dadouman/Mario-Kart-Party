@@ -1,5 +1,5 @@
 // Service worker : cache précautionneux pour le fonctionnement hors ligne.
-const CACHE = 'mkp-v4-game-timeline';
+const CACHE = 'mkp-v5-simple-scores';
 const ASSETS = [
   './',
   'index.html',

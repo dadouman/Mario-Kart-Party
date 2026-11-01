@@ -31,8 +31,8 @@
   - historique des tirages.
 - **Grand Prix** : 4 courses par défaut (configurable), tirées au sort ou reprises d'un tirage rapide.
 - **Saisie des courses** :
-  - positions de **1 à 12** — les bots du jeu occupent les places entre les joueurs humains, on peut donc finir 8e à 4 joueurs ;
-  - statuts spéciaux : Abandon, Absent, Forfait (0 point) ;
+  - un **champ numérique par joueur** pour saisir sa place réelle, bots compris, et des points calculés automatiquement ;
+  - statuts spéciaux via « N’a pas terminé » : Abandon, Absent, Forfait (0 point) ;
   - détection des conflits (deux joueurs sur la même place) avant validation.
 - **Barème modifiable** : 15/12/10/9/8/7/6/5/4/3/2/1 par défaut, éditable dans les réglages.
 - **Validation et corrections** : un GP validé verrouille la saisie ; une correction reste possible et est **tracée dans un journal d'audit** (qui a modifié quoi et quand).
@@ -86,7 +86,7 @@ restent accessibles pour la saisie ou une correction.
 2. **Tirez les courses** :
    - depuis la soirée : « Nouveau Grand Prix » — cochez un ou plusieurs jeux, choisissez les éditions, le nombre de courses, puis « Tirer les courses » ;
    - ou depuis l'onglet « Tirage » : tirez, verrouillez vos circuits préférés, relancez le reste, puis « Lancer un Grand Prix » ou « Créer une session avec ce tirage ».
-3. **Saisissez chaque course** — pour chaque joueur, touchez sa position d'arrivée (1 à 12) ou son statut (Abandon/Absent/Forfait). Les points s'affichent en direct.
+3. **Saisissez chaque course** — tapez la place réelle de chaque joueur dans son champ numérique. Les points s'affichent en direct ; une place au-delà du barème vaut 0 point. Les doublons et les valeurs invalides sont signalés. Utilisez « N’a pas terminé » pour les cas particuliers, puis « Enregistrer et passer à la course suivante ». Après la dernière course, le bouton ramène au bilan du Grand Prix. Les saisies partielles sont sauvegardées automatiquement ; le bouton d'enregistrement écrit immédiatement la sauvegarde avant de changer de course.
 4. **Validez le Grand Prix** — une fois les 4 courses complètes et sans conflit, « Valider le Grand Prix » ajoute les points au classement de la soirée.
 5. **Corrigez si besoin** — « Modifier » sur le GP validé : chaque changement est horodaté dans l'historique d'audit.
 6. **Consultez les classements** — onglet « Classement » : par soirée ou toutes soirées, export CSV possible.

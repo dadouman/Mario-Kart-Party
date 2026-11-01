@@ -3,7 +3,7 @@
 // ============================================================
 
 import {
-  getState, save, lastSession, findSession, findGame, getPlayers,
+  getState, save, flushSave, lastSession, findSession, findGame, getPlayers,
   activeGames, gameContents, newId, isPersistent,
 } from './store.js';
 import { PLAYER_COLORS } from './ui.js';
@@ -704,131 +704,158 @@ export function GpView(sessionId, gpId) {
 // ---------- Saisie d'une course ----------
 
 export function RaceView(sessionId, gpId, raceNum) {
-  const st = S();
   const session = findSession(sessionId);
   const gp = session && session.grandPrix.find((g) => g.id === gpId);
   const race = gp && gp.races.find((r) => r.num === raceNum);
   if (!race) return NotFound();
 
   const players = getPlayers(session.playerIds);
-  const n = players.length;
-  // Positions saisissables : jusqu'à la longueur du barème (12 par défaut),
-  // car les bots du jeu occupent les places entre les joueurs humains.
-  const maxPos = Math.max(n, gp.bareme.length);
+  race.results = race.results || {};
+  const controls = new Map();
+  const gpUrl = '#/session/' + sessionId + '/gp/' + gpId;
+  const next = gp.races.find((r) => r.num > race.num &&
+    (!raceComplete(r, players.length) || gpConflicts({ races: [r] }).length));
+  const message = h('p', { class: 'score-feedback sub', role: 'status', 'aria-live': 'polite' });
+  const saveBtn = h('button', {
+    class: 'btn btn-primary btn-block score-submit', disabled: true,
+    'data-testid': 'button-save-scores',
+    onclick: () => {
+      if (gp.validated || !refreshFeedback()) return;
+      if (!flushSave()) {
+        toast('Sauvegarde impossible sur cet appareil. Vos saisies restent disponibles dans cet onglet.', 'err');
+        return;
+      }
+      location.hash = gpUrl + (next ? '/course/' + next.num : '');
+    },
+  }, next ? 'Enregistrer et passer à la course suivante' : 'Enregistrer et voir le bilan');
 
-  function conflicts() {
-    const counts = {};
-    for (const p of players) {
-      const r = race.results[p.id];
-      if (r && typeof r.pos === 'number') counts[r.pos] = (counts[r.pos] || 0) + 1;
-    }
-    return Object.entries(counts).filter(([, c]) => c > 1).map(([p]) => Number(p));
+  function validPlace(raw) {
+    return /^\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) && Number(raw) >= 1;
+  }
+  function refreshFeedback() {
+    const counts = new Map();
+    players.forEach((p) => {
+      const res = race.results[p.id];
+      if (res && !res.status && typeof res.pos === 'number')
+        counts.set(res.pos, (counts.get(res.pos) || 0) + 1);
+    });
+    let invalid = 0, clashes = 0, filled = 0;
+    controls.forEach((c, pid) => {
+      const res = race.results[pid] || {};
+      const raw = c.input.value.trim();
+      const bad = !res.status && raw !== '' && !validPlace(raw);
+      const clash = !res.status && counts.get(res.pos) > 1;
+      const error = bad ? 'Saisis un nombre entier à partir de 1.' :
+        clash ? 'Place ' + res.pos + ' déjà utilisée.' : '';
+      c.input.setAttribute('aria-invalid', String(!!error));
+      c.row.classList.toggle('has-error', !!error);
+      c.error.textContent = error;
+      c.error.hidden = !error;
+      c.input.disabled = gp.validated || !!res.status;
+      const pts = bad ? null : pointsFor(res, gp.bareme);
+      c.points.textContent = pts === null ? '—' : String(pts);
+      c.points.classList.toggle('has-points', pts !== null);
+      c.status.textContent = res.status
+        ? (RACE_STATUSES.find((s) => s.key === res.status)?.label || res.status) + ' · Modifier'
+        : 'N’a pas terminé';
+      if (bad) invalid++;
+      if (clash) clashes++;
+      if (res.status || (!bad && typeof res.pos === 'number')) filled++;
+    });
+    const ready = !invalid && !clashes && filled === players.length;
+    saveBtn.disabled = gp.validated || !ready;
+    message.textContent = gp.validated ? 'Résultats validés. La saisie est verrouillée.' :
+      clashes ? 'Deux joueurs ne peuvent pas avoir la même place.' :
+      invalid ? 'Corrige les places signalées avant de continuer.' :
+      ready ? 'Tout est renseigné. Tu peux continuer.' :
+      'Renseigne la place de chaque joueur.';
+    return ready;
   }
 
-  function build() {
-    const rows = players.map((p) => {
-      const res = race.results[p.id] || {};
-      const pts = pointsFor(res, gp.bareme);
-      const taken = new Set(
-        players.filter((q) => q.id !== p.id).map((q) => race.results[q.id]).filter((r) => r && typeof r.pos === 'number').map((r) => r.pos)
-      );
-
-      const chips = h('div', { class: 'pos-grid' },
-        Array.from({ length: maxPos }, (_, i) => i + 1).map((pos) => {
-          const sel = res.pos === pos;
-          const takenByOther = !sel && taken.has(pos);
-          const clash = sel && conflicts().includes(pos);
-          const b = h('button', {
-            class: 'pos-chip' + (sel ? ' sel' : '') + (clash ? ' sel' : ''),
-            'data-testid': 'pos-' + p.name + '-' + pos,
-            disabled: gp.validated,
-            'aria-label': p.name + ' en position ' + pos,
-            style: clash ? 'background:var(--danger);border-color:var(--danger);color:#fff' : null,
-            onclick: () => {
-              if (race.results[p.id] && race.results[p.id].pos === pos) {
-                delete race.results[p.id].pos;
-              } else {
-                race.results[p.id] = { pos };
-              }
-              save();
-              build();
-            },
-          }, String(pos));
-          if (takenByOther) b.style.opacity = '.5';
-          return b;
-        })
-      );
-
-      const statusSel = h('select', {
-        class: 'select', style: 'max-width:140px', 'aria-label': 'Statut de ' + p.name,
-        disabled: gp.validated,
-      },
-        h('option', { value: '' }, 'Statut…'),
-        RACE_STATUSES.map((s) => h('option', { value: s.key, selected: res.status === s.key }, s.label))
-      );
-      statusSel.addEventListener('change', () => {
-        if (statusSel.value) race.results[p.id] = { status: statusSel.value };
+  const rows = players.map((p, index) => {
+    const res = race.results[p.id] || {};
+    const errorId = 'score-error-' + p.id;
+    const input = h('input', {
+      class: 'score-place', type: 'text', inputmode: 'numeric', pattern: '[0-9]*',
+      enterkeyhint: index < players.length - 1 ? 'next' : 'done',
+      autocomplete: 'off', placeholder: '—', value: res.pos == null ? '' : res.pos,
+      disabled: gp.validated || !!res.status,
+      'aria-label': 'Place de ' + p.name, 'aria-describedby': errorId,
+      'data-testid': 'input-place-' + p.id,
+      onfocus: () => input.select(),
+      oninput: () => {
+        if (gp.validated) return;
+        const raw = input.value.trim();
+        if (validPlace(raw)) race.results[p.id] = { pos: Number(raw) };
         else delete race.results[p.id];
         save();
-        build();
-      });
-
-      return h('div', { class: 'result-row' },
-        h('div', { style: 'display:flex;align-items:center;gap:10px;min-width:140px' },
-          avatarEl(p), h('strong', {}, p.name)),
-        chips,
-        statusSel,
-        h('span', { class: 'result-pts', style: 'color:' + (pts ? 'var(--gold)' : 'var(--text-faint)') },
-          pts === null ? '—' : '+' + pts)
-      );
+        refreshFeedback();
+      },
+      onkeydown: (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const following = [...controls.values()].slice(index + 1).find((c) => !c.input.disabled);
+        if (following) following.input.focus();
+        else if (!saveBtn.disabled) saveBtn.click();
+      },
     });
-
-    const cf = conflicts();
-    box.innerHTML = '';
-    box.append(
-      h('div', { class: 'spread', style: 'margin-bottom:6px' },
-        h('div', {},
-          h('h2', { class: 'section-title', style: 'margin:0' }, 'Course ' + race.num + ' / ' + gp.races.length + ' — ' + race.contentName),
-          gameBadge(raceGame(race, gp)),
-          h('p', { class: 'sub' },
-            race.editionName || 'Jeu de base'
-          ),
-          h('p', { class: 'sub', style: 'font-size:.75rem' },
-            'Places de 1 à ' + maxPos + ' : les bots occupent les places entre les joueurs humains.'
-          )
-        ),
-        raceComplete(race) ? h('span', { class: 'badge badge-ok' }, 'Complète') : h('span', { class: 'badge' }, 'Saisie en cours')
-      ),
-      ...rows
-    );
-    if (cf.length) {
-      box.append(h('div', { class: 'warn-banner' },
-        h('div', {}, 'Position' + (cf.length > 1 ? 's' : '') + ' ' + cf.join(', ') + ' attribuée' + (cf.length > 1 ? 's' : '') + ' à plusieurs joueurs : corrigez pour valider le GP.')
-      ));
-    }
-    if (!gp.validated && raceComplete(race, players.length) && !cf.length) {
-      const next = gp.races.find((r) => r.num > race.num &&
-        (!raceComplete(r, players.length) || gpConflicts({ races: [r] }).length));
-      box.append(h('div', { class: 'card stack race-next' },
-        h('strong', {}, next ? 'Ensuite : course ' + next.num : 'Course saisie'),
-        next ? gameBadge(raceGame(next, gp)) : null,
-        h('a', {
-          class: 'btn btn-primary btn-block', 'data-testid': 'button-continue-race',
-          href: '#/session/' + sessionId + '/gp/' + gpId + (next ? '/course/' + next.num : ''),
-        }, next ? 'Continuer · ' + next.contentName : 'Revenir au bilan du Grand Prix')));
-    }
-  }
-
-  const box = h('div', { class: 'stack' });
-  build();
-
-  return h('div', { class: 'stack fade-in' },
-    h('a', { class: 'back-link', href: '#/session/' + sessionId + '/gp/' + gpId }, '← Grand Prix'),
+    const points = h('output', {
+      class: 'score-points', 'aria-label': 'Points de ' + p.name,
+      'data-testid': 'points-' + p.id,
+    });
+    const error = h('p', { class: 'score-field-error', id: errorId, hidden: true });
+    const status = h('button', {
+      class: 'score-status-link', disabled: gp.validated,
+      'aria-label': 'Résultat particulier de ' + p.name,
+      'data-testid': 'button-score-status-' + p.id,
+      onclick: () => {
+        const choose = (key) => {
+          if (gp.validated) return;
+          if (key) race.results[p.id] = { status: key };
+          else delete race.results[p.id];
+          input.value = '';
+          save();
+          refreshFeedback();
+          close();
+          if (!key) input.focus();
+        };
+        const close = modal({
+          title: 'Résultat de ' + p.name,
+          body: h('div', { class: 'stack' },
+            h('p', { class: 'sub' }, 'Ces situations valent 0 point.'),
+            RACE_STATUSES.map((s) => h('button', {
+              class: 'btn btn-outline btn-block', onclick: () => choose(s.key),
+            }, s.label)),
+            h('button', { class: 'btn btn-ghost btn-block', onclick: () => choose(null) }, 'Saisir une place')),
+          actions: [{ label: 'Annuler' }],
+        });
+      },
+    }, 'N’a pas terminé');
+    const row = h('div', { class: 'score-row' },
+      h('div', { class: 'score-player' },
+        h('div', { class: 'score-player-name' }, avatarEl(p), h('strong', {}, p.name)),
+        status),
+      input, points, error);
+    controls.set(p.id, { row, input, points, status, error });
+    return row;
+  });
+  refreshFeedback();
+  return h('div', { class: 'stack fade-in score-page' },
+    h('a', { class: 'back-link', href: gpUrl }, '← Grand Prix'),
+    h('header', { class: 'stack score-heading' },
+      h('p', { class: 'score-course-number' }, 'COURSE ' + race.num + ' SUR ' + gp.races.length),
+      gameBadge(raceGame(race, gp)),
+      h('h1', { class: 'page-title' }, race.contentName),
+      h('p', { class: 'sub' }, 'Saisis la place affichée dans le jeu, bots compris.')),
     gp.validated
       ? h('div', { class: 'warn-banner' }, h('div', {}, 'Grand Prix validé : la saisie est verrouillée. Utilisez « Modifier » sur la page du GP pour corriger.'))
       : null,
-    h('div', { class: 'card stack' }, box),
-    h('a', { class: 'btn btn-ghost btn-block', href: '#/session/' + sessionId + '/gp/' + gpId }, 'Retour au Grand Prix')
+    h('section', { class: 'card score-sheet', 'aria-label': 'Places et points des joueurs' },
+      h('div', { class: 'score-columns', 'aria-hidden': 'true' },
+        h('span', {}, 'Joueur'), h('span', {}, 'Place'), h('span', {}, 'Points')),
+      ...rows),
+    gp.validated ? h('a', { class: 'btn btn-outline btn-block', href: gpUrl }, 'Retour au Grand Prix')
+      : h('div', { class: 'stack score-footer' }, message, saveBtn)
   );
 }
 

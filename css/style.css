@@ -499,6 +499,43 @@ h1, h2, h3, .display { font-family: var(--font-display); }
 .result-row:last-child { border-bottom: none; }
 .result-pts { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; min-width: 56px; text-align: right; }
 
+/* Feuille de scores : une place par joueur, sans grille ni menu permanent. */
+.score-heading { gap: 10px; }
+.score-heading > * { margin-block: 0; }
+.score-heading .game-identity { align-self: flex-start; width: fit-content; }
+.score-course-number { font-size: .72rem; font-weight: 750; letter-spacing: .1em; color: var(--text-muted); }
+.score-sheet { padding: 0 18px; overflow: hidden; }
+.score-columns, .score-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px 52px; column-gap: 12px; align-items: center; }
+.score-columns { padding: 16px 0 10px; font-size: .72rem; font-weight: 650; color: var(--text-muted); border-bottom: 1px solid var(--divider); }
+.score-columns > :not(:first-child) { text-align: center; }
+.score-row { padding: 12px 0; border-bottom: 1px solid var(--divider); }
+.score-row:last-child { border-bottom: none; }
+.score-player { min-width: 0; }
+.score-player-name { display: flex; align-items: center; gap: 8px; }
+.score-player-name strong { min-width: 0; overflow-wrap: anywhere; font-size: .92rem; }
+.score-player-name .player-avatar { width: 24px; height: 24px; font-size: .62rem; }
+.score-status-link { display: block; padding: 8px 0 0; color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px; font-size: .7rem; text-align: left; }
+.score-status-link:hover { color: var(--primary); }
+.score-status-link:disabled { opacity: .65; cursor: not-allowed; }
+.score-place { width: 72px; height: 52px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); font-family: var(--font-display); font-size: 1.65rem; font-weight: 700; text-align: center; caret-color: var(--primary); }
+.score-place::placeholder { color: var(--text-faint); font-size: 1.1rem; }
+.score-place:focus { border-color: var(--primary); outline: 3px solid color-mix(in srgb, var(--primary) 18%, transparent); outline-offset: 1px; }
+.score-place:disabled { opacity: .65; }
+.score-row.has-error .score-place { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--surface)); }
+.score-points { text-align: center; font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; color: var(--text-faint); }
+.score-points.has-points { color: var(--text); }
+.score-field-error { grid-column: 1 / -1; margin: 8px 0 0; color: var(--danger); font-size: .75rem; }
+.score-field-error[hidden] { display: none; }
+.score-footer { gap: 12px; }
+.score-feedback { margin: 0; text-align: center; font-size: .8rem; }
+.score-submit { min-height: 52px; white-space: normal; text-align: center; }
+@media (min-width: 720px) {
+  #main:has(.score-page) { max-width: 700px; }
+  .score-sheet { padding-inline: 24px; }
+  .score-columns, .score-row { grid-template-columns: minmax(0, 1fr) 88px 72px; column-gap: 24px; }
+  .score-place { width: 88px; }
+}
+
 /* ---------- Podium / classement ---------- */
 .rank-row {
   display: flex;
