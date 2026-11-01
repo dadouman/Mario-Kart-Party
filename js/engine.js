@@ -77,13 +77,31 @@ export function pointsFor(result, bareme) {
   return bareme[i];
 }
 
-export function raceComplete(race) {
+export function raceComplete(race, expectedCount) {
   if (!race || !race.results) return false;
-  return Object.values(race.results).every((r) => r && (r.status || typeof r.pos === 'number'));
+  const entries = Object.entries(race.results);
+  if (expectedCount) {
+    if (entries.length !== expectedCount) return false;
+  } else if (entries.length === 0) {
+    return false;
+  }
+  return entries.every(([, r]) => r && (r.status || typeof r.pos === 'number'));
 }
 
-export function gpComplete(gp) {
-  return gp.races.every((r) => raceComplete(r));
+export function gpComplete(gp, expectedCount) {
+  return gp.races.every((r) => raceComplete(r, expectedCount));
+}
+
+export function gpConflicts(gp) {
+  const clashes = [];
+  for (const race of gp.races) {
+    const counts = {};
+    for (const res of Object.values(race.results || {})) {
+      if (res && typeof res.pos === 'number') counts[res.pos] = (counts[res.pos] || 0) + 1;
+    }
+    for (const [pos, c] of Object.entries(counts)) if (c > 1) clashes.push(Number(pos));
+  }
+  return clashes;
 }
 
 export function gpPoints(gp) {

@@ -12,6 +12,7 @@ import { drawItems, eligibleItems, sessionRanking, allTimeStats, RACE_STATUSES }
 import { NotFound, HomeView } from './views.js';
 
 const S = () => getState();
+const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
 
 // ---------- Tirage rapide ----------
 
@@ -113,7 +114,7 @@ export function TirageView() {
     const res = drawItems(eligible, { count, unique, lockedIds: keepLocked ? lockedIds : [] });
     if (res.error) { refreshInfo(); return; }
     currentItems = res.items;
-    lockedIds = [];
+    if (!keepLocked) lockedIds = [];
     drawResults();
     // Historique des tirages (attaché à la session ouverte, sinon global via session fictive)
     if (keepLocked === undefined) {
@@ -130,6 +131,7 @@ export function TirageView() {
 
   function drawResults() {
     resultsBox.innerHTML = '';
+    rerollBtn.style.display = currentItems.length ? '' : 'none';
     if (!currentItems.length) {
       resultsBox.append(h('p', { class: 'sub', style: 'text-align:center;padding:8px 0' },
         'Réglez les filtres puis lancez le tirage.'));
@@ -190,7 +192,7 @@ export function TirageView() {
       infoBox,
       drawBtn
     ),
-    currentItems.length ? rerollBtn : null,
+    rerollBtn,
     resultsBox
   );
 }
@@ -598,7 +600,7 @@ export function ClassementView() {
               avatarEl(p),
               h('div', { style: 'flex:1;min-width:0' },
                 h('div', { style: 'font-weight:600' }, p.name),
-                h('div', { class: 'rank-sub' }, row.wins + ' victoires · ' + row.podiums + ' podiums · ' + row.gps + ' GP')
+                h('div', { class: 'rank-sub' }, pl(row.wins, 'victoire') + ' · ' + pl(row.podiums, 'podium') + ' · ' + pl(row.gps, 'GP'))
               ),
               h('span', { class: 'rank-pts' }, row.pts + ' pts')
             );

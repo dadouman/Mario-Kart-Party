@@ -11,13 +11,14 @@ import {
   h, render, toast, modal, confirmModal, fmtDate, avatarEl,
 } from './ui.js';
 import {
-  drawItems, eligibleItems, raceComplete, gpComplete, gpPoints,
+  drawItems, eligibleItems, raceComplete, gpComplete, gpPoints, gpConflicts,
   sessionRanking, RACE_STATUSES, pointsFor,
 } from './engine.js';
 
 export { h };
 
 const S = () => getState();
+const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
 
 // ---------- Petits composants ----------
 
@@ -56,9 +57,9 @@ export function HomeView() {
         )
       : null,
     h('div', { class: 'stats-grid' },
-      h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(sessions.length)), h('div', { class: 'stat-label' }, 'Sessions')),
-      h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(gpsTotal)), h('div', { class: 'stat-label' }, 'Grands Prix validés')),
-      h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(st.players.length)), h('div', { class: 'stat-label' }, 'Joueurs enregistrés'))
+      h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(sessions.length)), h('div', { class: 'stat-label' }, pl(sessions.length, 'Session'))),
+      h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(gpsTotal)), h('div', { class: 'stat-label' }, pl(gpsTotal, 'GP validé'))),
+      h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(st.players.length)), h('div', { class: 'stat-label' }, pl(st.players.length, 'Joueur')))
     ),
     last
       ? h('a', { class: 'card card-click', href: '#/session/' + last.id, style: 'display:block;text-decoration:none' },
@@ -78,7 +79,7 @@ export function HomeView() {
       h('a', { class: 'btn btn-primary btn-block', href: '#/nouvelle-session' }, 'Nouvelle session'),
       h('div', { class: 'row', style: 'margin-top:10px' },
         h('a', { class: 'btn btn-ghost', href: '#/tirage', style: 'flex:1' }, 'Tirage rapide'),
-        h('a', { class: 'btn btn-ghost', href: '#/jeux', style: 'flex:1' }, 'Bibliothèque de jeux')
+        h('a', { class: 'btn btn-ghost', href: '#/jeux', style: 'flex:1' }, 'Jeux')
       )
     ),
     sessions.length
@@ -479,7 +480,7 @@ export function GpView(sessionId, gpId) {
   if (!gp) return NotFound();
 
   const players = getPlayers(session.playerIds);
-  const complete = gpComplete(gp);
+  const complete = gpComplete(gp, session.playerIds.length) && gpConflicts(gp).length === 0;
   const provPoints = gpPoints(gp);
   const rank = Object.entries(provPoints).sort((a, b) => b[1] - a[1]);
 
@@ -507,7 +508,7 @@ export function GpView(sessionId, gpId) {
 
   const raceList = h('div', { class: 'stack' },
     gp.races.map((race) => {
-      const done = raceComplete(race);
+      const done = raceComplete(race, session.playerIds.length);
       const btn = h('button', {
         class: 'race-item' + (done ? ' done' : ''),
         'data-testid': 'race-' + race.num,
@@ -686,7 +687,7 @@ export function RaceView(sessionId, gpId, raceNum) {
     });
 
     const cf = conflicts();
-    const box.innerHTML = '';
+    box.innerHTML = '';
     box.append(
       h('div', { class: 'spread', style: 'margin-bottom:6px' },
         h('div', {},
@@ -695,13 +696,13 @@ export function RaceView(sessionId, gpId, raceNum) {
         ),
         raceComplete(race) ? h('span', { class: 'badge badge-ok' }, 'Complète') : h('span', { class: 'badge' }, 'Saisie en cours')
       ),
-      ...rows,
-      cf.length
-        ? h('div', { class: 'warn-banner' },
-            h('div', {}, 'Position' + (cf.length > 1 ? 's' : '') + ' ' + cf.join(', ') + ' attribuée' + (cf.length > 1 ? 's' : '') + ' à plusieurs joueurs : corrigez pour valider le GP.')
-          )
-        : null
+      ...rows
     );
+    if (cf.length) {
+      box.append(h('div', { class: 'warn-banner' },
+        h('div', {}, 'Position' + (cf.length > 1 ? 's' : '') + ' ' + cf.join(', ') + ' attribuée' + (cf.length > 1 ? 's' : '') + ' à plusieurs joueurs : corrigez pour valider le GP.')
+      ));
+    }
   }
 
   const box = h('div', { class: 'stack' });

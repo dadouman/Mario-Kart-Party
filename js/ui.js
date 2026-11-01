@@ -5,7 +5,8 @@
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (v == null) continue;
+    if (v == null || v === false) continue;
+    if (typeof v === 'boolean') { el[k] = v; continue; }
     if (k.startsWith('on') && typeof v === 'function') {
       el.addEventListener(k.slice(2), v);
     } else if (k === 'class') {
