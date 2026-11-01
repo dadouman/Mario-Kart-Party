@@ -1,5 +1,5 @@
 // Service worker : cache précautionneux pour le fonctionnement hors ligne.
-const CACHE = 'mkp-v2-circuit-cleanup';
+const CACHE = 'mkp-v3-quick-draw';
 const ASSETS = [
   './',
   'index.html',

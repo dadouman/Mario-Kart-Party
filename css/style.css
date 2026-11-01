@@ -393,6 +393,44 @@ h1, h2, h3, .display { font-family: var(--font-display); }
 .race-item.done .race-num { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
 
 /* ---------- Saisie des places ---------- */
+/* Tirage: choix compacts, options progressives, résultats et lancement réunis. */
+.draw-layout { display: grid; gap: 20px; align-items: start; }
+.draw-config [hidden] { display: none !important; }
+.draw-config-summary { margin: 0; font-size: .8rem; }
+.draw-games { display: grid; gap: 8px; }
+.draw-game { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.draw-game.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
+.draw-game input { width: 18px; height: 18px; accent-color: var(--primary); }
+.draw-game .sub { font-size: .72rem; }
+.draw-count-presets { display: flex; gap: 6px; }
+.draw-count { gap: 10px; flex-wrap: wrap; }
+.draw-count input { margin-left: auto; }
+.draw-options { border-block: 1px solid var(--divider); }
+.draw-options summary { padding: 14px 0; cursor: pointer; font-size: .87rem; font-weight: 600; }
+.draw-options > .stack { padding: 0 0 16px; }
+.draw-results { display: grid; gap: 10px; }
+.draw-output > .spread { align-items: start; flex-wrap: wrap; }
+.draw-empty { min-height: 210px; border: 1px dashed var(--border); border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 20px; text-align: center; }
+.draw-empty p { margin: 0; }
+.draw-empty-count { font-family: var(--font-display); font-size: 3.5rem; line-height: 1; font-weight: 700; color: var(--primary); }
+.draw-course.draw-card { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; padding: 13px 10px; text-align: left; background: var(--surface-2); border: 1px solid var(--divider); border-radius: 13px; }
+.draw-course.is-locked { border-color: var(--gold); }
+.draw-course .race-num { width: 30px; height: 30px; font-size: .8rem; }
+.draw-course .draw-name { font-size: .95rem; line-height: 1.35; margin: 0; overflow-wrap: anywhere; }
+.draw-course-copy > .sub { font-size: .7rem; margin-top: 4px; line-height: 1.45; }
+.draw-course-copy > .badge { margin-top: 6px; font-size: .65rem; }
+.draw-course-tools { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.draw-course .lock-btn { position: static; width: 56px; height: 38px; font-size: .68rem; font-weight: 600; color: var(--text-muted); border: 1px solid var(--border); background: var(--surface); }
+.draw-course .lock-btn.on { color: var(--gold); border-color: var(--gold); }
+.draw-course-tools > .btn { font-size: .68rem; padding: 5px; min-height: 30px; }
+.draw-launch:has(> div:empty) { display: none; }
+.draw-launch { border-top: 1px solid var(--divider); padding-top: 16px; }
+@media (min-width: 900px) {
+  #main:has(.draw-page) { max-width: 1100px; }
+  .draw-layout { grid-template-columns: minmax(280px, .85fr) minmax(0, 1.15fr); }
+  .draw-config { position: sticky; top: 86px; }
+  .draw-course-tools { flex-direction: row; }
+}
 .pos-grid { display: flex; flex-wrap: wrap; gap: 7px; }
 .pos-chip {
   min-width: 44px;

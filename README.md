@@ -61,6 +61,21 @@ Puis ouvrez http://localhost:3000 et installez l'application depuis le menu du n
 
 ## Guide d'utilisation
 
+### Tirage rapide
+
+Choisissez vos jeux et un format de 2, 4, 6 ou 8 courses (ou un nombre
+personnalisé). Le volet **Éditions, DLC et options** permet de choisir le jeu
+de base uniquement, d'inclure toutes les éditions actives, et de régler les
+doublons et l'exclusion des cinq derniers tirages. Ces préférences sont
+mémorisées sur l'appareil.
+
+Après le tirage, les réglages se replient. Utilisez **Garder** pour protéger
+une course à sa position, **Changer** pour remplacer une seule course, ou
+**Relancer les courses libres** pour refaire le reste. Un changement de
+filtres efface les résultats précédents pour éviter de lancer un GP avec
+une sélection périmée. Choisissez votre soirée dans le sélecteur, puis
+**Lancer le Grand Prix**, ou créez une nouvelle session avec ces courses.
+
 1. **Créez une soirée** — Accueil → « Nouvelle session » → ajoutez au moins 2 joueurs (12 maximum).
 2. **Tirez les courses** :
    - depuis la soirée : « Nouveau Grand Prix » — cochez un ou plusieurs jeux, choisissez les éditions, le nombre de courses, puis « Tirer les courses » ;

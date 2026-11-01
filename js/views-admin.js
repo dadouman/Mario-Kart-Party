@@ -32,15 +32,44 @@ export function TirageView() {
   }
 
   // Multi-jeux : le tirage peut mélanger les contenus de plusieurs jeux.
-  const selectedGames = new Set(games.map((g) => g.id));
-  const editionsByGame = new Map(games.map((g) => [g.id, new Set(g.editions.filter((e) => e.active).map((e) => e.id))]));
-  let count = 4;
-  let unique = true;
-  let excludeRecent = false;
+  const prefs = st.settings.drawPreferences || {};
+  const remembered = (prefs.gameIds || []).filter((id) => games.some((g) => g.id === id));
+  const selectedGames = new Set(remembered.length ? remembered : games.map((g) => g.id));
+  const editionsByGame = new Map(games.map((g) => [g.id,
+    new Set((prefs.editionIds && Array.isArray(prefs.editionIds[g.id])
+      ? prefs.editionIds[g.id] : g.editions.filter((e) => e.active).map((e) => e.id))
+      .filter((id) => g.editions.some((ed) => ed.id === id))) ]));
+  let count = Math.max(1, Math.min(24, Number(prefs.count) || 4));
+  let unique = prefs.unique !== false;
+  let excludeRecent = prefs.excludeRecent === true;
   let lockedIds = [];
   let currentItems = [];
+  const configBody = h('div', { class: 'stack' });
+  const configSummary = h('p', { class: 'sub draw-config-summary' });
+  const editBtn = h('button', {
+    class: 'btn btn-outline btn-sm', style: 'display:none',
+    'data-testid': 'button-edit-draw',
+    onclick: () => {
+      configBody.hidden = !configBody.hidden;
+      editBtn.textContent = configBody.hidden ? 'Modifier' : 'Replier';
+    },
+  }, 'Modifier');
+  function remember() {
+    st.settings.drawPreferences = {
+      gameIds: [...selectedGames], editionIds: Object.fromEntries(
+        [...editionsByGame].map(([id, ids]) => [id, [...ids]])),
+      count, unique, excludeRecent,
+    };
+    save();
+  }
+  function changed() {
+    lockedIds = []; currentItems = [];
+    remember(); refreshInfo(); drawResults();
+    configBody.hidden = false;
+    editBtn.style.display = 'none';
+  }
 
-  const gamesBox = h('div', { class: 'stack' });
+  const gamesBox = h('div', { class: 'draw-games' });
   const editionsBox = h('div', { class: 'stack' });
   function refreshGames() {
     gamesBox.innerHTML = '';
@@ -51,31 +80,35 @@ export function TirageView() {
         if (cb.checked) selectedGames.add(g.id);
         else if (selectedGames.size > 1) selectedGames.delete(g.id);
         else { cb.checked = true; toast('Gardez au moins un jeu sélectionné'); return; }
-        lockedIds = []; currentItems = [];
-        refreshGames(); refreshEditions(); refreshInfo(); drawResults();
+        refreshGames(); refreshEditions(); changed();
       });
-      const n = gameContents(g, [...editionsByGame.get(g.id)]).length;
-      gamesBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
-        h('span', { class: 'content-name' }, g.icon + '  ' + g.name),
-        h('span', { class: 'badge' }, n + ' contenus')
+      const n = eligibleItems(gameContents(g, [...editionsByGame.get(g.id)]), {}).length;
+      gamesBox.append(h('label', { class: 'draw-game' + (cb.checked ? ' selected' : '') }, cb,
+        h('span', { class: 'content-name' }, g.name),
+        h('span', { class: 'sub' }, n + ' circuits')
       ));
     });
   }
   function refreshEditions() {
     editionsBox.innerHTML = '';
     const sel = games.filter((g) => selectedGames.has(g.id));
-    if (sel.length > 1) {
-      editionsBox.append(h('span', { class: 'sub' }, 'Éditions actives de chaque jeu sélectionné :'));
-    }
     sel.forEach((g) => {
-      if (sel.length > 1) editionsBox.append(h('div', { class: 'field-label', style: 'margin-top:4px' }, g.icon + '  ' + g.name));
+      editionsBox.append(h('div', { class: 'field-label' }, g.name));
+      const chooseEditions = (baseOnly) => {
+        editionsByGame.set(g.id, new Set(g.editions.filter((ed) =>
+          baseOnly ? !ed.dlc && ed.active : ed.active).map((ed) => ed.id)));
+        refreshGames(); refreshEditions(); changed();
+      };
+      editionsBox.append(h('div', { class: 'row' },
+        h('button', { class: 'btn btn-outline btn-sm', onclick: () => chooseEditions(true) }, 'Jeu de base'),
+        h('button', { class: 'btn btn-outline btn-sm', onclick: () => chooseEditions(false) }, 'Tout inclure')));
       g.editions.forEach((ed) => {
         const cb = h('input', { type: 'checkbox' });
         cb.checked = editionsByGame.get(g.id).has(ed.id);
         cb.addEventListener('change', () => {
           if (cb.checked) editionsByGame.get(g.id).add(ed.id);
           else editionsByGame.get(g.id).delete(ed.id);
-          refreshInfo();
+          refreshGames(); changed();
         });
         editionsBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
           h('span', { class: 'content-name' }, ed.name + (ed.dlc ? ' (DLC)' : '')),
@@ -92,23 +125,38 @@ export function TirageView() {
   }
 
   const countInput = h('input', {
-    class: 'input', type: 'number', min: 1, max: 24, value: 4,
-    style: 'max-width:100px', 'aria-label': 'Nombre de contenus', 'data-testid': 'input-draw-count',
+    class: 'input', type: 'number', min: 1, max: 24, value: count,
+    style: 'width:80px', 'aria-label': 'Nombre de courses', 'data-testid': 'input-draw-count',
   });
   countInput.addEventListener('input', () => {
     count = Math.max(1, Math.min(24, parseInt(countInput.value, 10) || 4));
-    refreshInfo();
+    countInput.value = count;
+    refreshPresets(); changed();
   });
+  const countPresets = h('div', { class: 'draw-count-presets', role: 'group', 'aria-label': 'Nombre de courses' });
+  function refreshPresets() {
+    countPresets.innerHTML = '';
+    [2, 4, 6, 8].forEach((n) => countPresets.append(h('button', {
+      class: 'btn btn-sm ' + (n === count ? 'btn-primary' : 'btn-outline'),
+      'aria-pressed': String(n === count),
+      onclick: () => { count = n; countInput.value = n; refreshPresets(); changed(); },
+    }, String(n))));
+  }
+  refreshPresets();
 
-  const infoBox = h('p', { class: 'sub' });
+  const infoBox = h('p', { class: 'sub', role: 'status', 'aria-live': 'polite' });
   const drawBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-draw' }, 'Tirer au sort');
-  const rerollBtn = h('button', { class: 'btn btn-ghost btn-block', 'data-testid': 'button-reroll' }, 'Relancer (hors verrouillés)');
-  const resultsBox = h('div', { class: 'stack' });
+  const rerollBtn = h('button', { class: 'btn btn-outline btn-sm', 'data-testid': 'button-reroll' }, 'Relancer les courses libres');
+  const resultsBox = h('div', { class: 'draw-results' });
+  const resultsTitle = h('h2', { class: 'section-title', style: 'margin:0', tabindex: '-1' }, 'Votre grille de départ');
+  const resultsHint = h('p', { class: 'sub' });
 
   function usedContentIds() {
     // Contenus déjà tirés lors des 5 derniers tirages enregistrés.
     const ids = new Set();
-    for (const d of st.sessions.flatMap((s) => s.draws).slice(-5)) {
+    const draws = [...(st.draws || []), ...st.sessions.flatMap((s) => s.draws || [])]
+      .sort((a, b) => a.date - b.date).slice(-5);
+    for (const d of draws) {
       for (const cid of d.contentIds || []) ids.add(cid);
     }
     return ids;
@@ -116,6 +164,9 @@ export function TirageView() {
 
   function refreshInfo() {
     const eligible = eligibleItems(currentPool(), { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
+    configSummary.textContent = count + ' courses · ' + selectedGames.size + ' jeu(x) · ' +
+      (unique ? 'Sans doublon' : 'Doublons autorisés');
+    drawBtn.textContent = 'Tirer ' + count + ' courses';
     if (!eligible.length) {
       infoBox.textContent = 'Aucun contenu éligible — activez des éditions ou vérifiez la bibliothèque.';
       drawBtn.disabled = true;
@@ -129,14 +180,25 @@ export function TirageView() {
   }
 
   function doDraw(keepLocked) {
-    const eligible = eligibleItems(currentPool(), { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
+    const recent = excludeRecent ? [...usedContentIds()].filter((id) => !lockedIds.includes(id)) : [];
+    const eligible = eligibleItems(currentPool(), { excludeIds: recent });
     const res = drawItems(eligible, { count, unique, lockedIds: keepLocked ? lockedIds : [] });
-    if (res.error) { refreshInfo(); return; }
-    currentItems = res.items;
+    if (res.error) {
+      infoBox.textContent = 'Pas assez de courses disponibles. Élargissez les éditions ou désactivez l’exclusion des tirages récents.';
+      configBody.hidden = false;
+      return;
+    }
+    if (keepLocked) {
+      const unlocked = res.items.filter((c) => !lockedIds.includes(c.id));
+      currentItems = currentItems.map((c) => lockedIds.includes(c.id) ? c : unlocked.shift());
+    } else currentItems = res.items;
     if (!keepLocked) lockedIds = [];
     drawResults();
+    configBody.hidden = true; editBtn.style.display = ''; editBtn.textContent = 'Modifier';
+    resultsTitle.focus({ preventScroll: true });
+    resultsBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     // Historique des tirages (attaché à la session ouverte, sinon global)
-    if (keepLocked === undefined) {
+    {
       const sess = st.sessions.filter((s) => s.status === 'open').slice(-1)[0];
       const gameNames = [...new Set(res.items.map((c) => c.gameName).filter(Boolean))];
       const entry = {
@@ -149,17 +211,33 @@ export function TirageView() {
       save();
     }
   }
+  function rerollOne(index) {
+    const old = currentItems[index];
+    const exclude = new Set(excludeRecent ? usedContentIds() : []);
+    if (unique) currentItems.forEach((c) => exclude.add(c.id));
+    exclude.add(old.id);
+    const res = drawItems(eligibleItems(currentPool(), { excludeIds: [...exclude] }), { count: 1, unique: true });
+    if (res.error) { toast('Aucune autre course disponible avec ces filtres', 'err'); return; }
+    currentItems[index] = res.items[0];
+    drawResults();
+  }
 
   function drawResults() {
     resultsBox.innerHTML = '';
     rerollBtn.style.display = currentItems.length ? '' : 'none';
+    rerollBtn.disabled = currentItems.length > 0 && currentItems.every((c) => lockedIds.includes(c.id));
+    resultsHint.textContent = currentItems.length
+      ? '« Garder » protège une course. « Changer » ne remplace que celle-ci.'
+      : 'Votre sélection apparaîtra ici. Choisissez vos jeux, puis lancez le tirage.';
     actionsBox.innerHTML = '';
     if (!currentItems.length) {
-      resultsBox.append(h('p', { class: 'sub', style: 'text-align:center;padding:8px 0' },
-        'Réglez les filtres puis lancez le tirage.'));
+      resultsBox.append(h('div', { class: 'draw-empty' },
+        h('span', { class: 'draw-empty-count' }, String(count)),
+        h('strong', {}, 'courses à découvrir'),
+        h('p', { class: 'sub' }, 'Un tirage, puis à vous de jouer.')));
       return;
     }
-    currentItems.forEach((c) => {
+    currentItems.forEach((c, index) => {
       const locked = lockedIds.includes(c.id);
       const lockBtn = h('button', {
         class: 'lock-btn' + (locked ? ' on' : ''),
@@ -170,58 +248,51 @@ export function TirageView() {
           else lockedIds.push(c.id);
           drawResults();
         },
-      }, h('svg', { viewBox: '0 0 24 24' },
-        locked
-          ? h('path', { d: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v9H5z' })
-          : h('path', { d: 'M7 11V8a5 5 0 0 1 9.9-1M5 11h14v9H5z' })
-      ));
-      resultsBox.append(h('div', { class: 'card draw-card' },
-        lockBtn,
-        h('div', { class: 'badge' }, (c.gameIcon || '🎮') + ' ' + (c.editionName || '')),
-        h('div', { class: 'draw-name', style: 'margin:8px 0 4px' }, c.name),
-        c.status === 'unverified'
-          ? h('span', { class: 'badge badge-warn' }, 'Nom à vérifier')
-          : null
+      }, locked ? 'Gardée' : 'Garder');
+      resultsBox.append(h('div', { class: 'draw-course draw-card' + (locked ? ' is-locked' : '') },
+        h('span', { class: 'race-num' }, String(index + 1).padStart(2, '0')),
+        h('div', { class: 'draw-course-copy' },
+          h('div', { class: 'draw-name' }, c.name),
+          h('div', { class: 'sub' }, (c.gameName || '') + ' · ' + (c.editionName || '')),
+          c.status === 'unverified' ? h('span', { class: 'badge badge-warn' }, 'À vérifier') : null),
+        h('div', { class: 'draw-course-tools' }, lockBtn,
+          h('button', {
+            class: 'btn btn-ghost btn-sm', disabled: locked,
+            'aria-label': 'Remplacer ' + c.name, 'data-testid': 'reroll-course-' + index,
+            onclick: () => rerollOne(index),
+          }, 'Changer'))
       ));
     });
 
     // Actions : lancer un Grand Prix avec ce tirage.
     const openSessions = st.sessions.filter((s) => s.status === 'open');
-    const latest = openSessions.slice(-1)[0];
+    const validSessions = openSessions.filter((s) => s.playerIds.length >= 2);
+    const latest = validSessions.slice(-1)[0];
     if (latest) {
+      const sessionSelect = h('select', {
+        class: 'select', 'aria-label': 'Session pour ce Grand Prix', 'data-testid': 'select-draw-session',
+      }, validSessions.map((s) => h('option', { value: s.id, selected: s.id === latest.id }, s.name)));
+      actionsBox.append(h('label', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Jouer dans la session'), sessionSelect));
       actionsBox.append(h('button', {
         class: 'btn btn-primary btn-block', 'data-testid': 'button-gp-in-session',
         onclick: () => {
+          const chosen = validSessions.find((s) => s.id === sessionSelect.value);
           const gp = buildGpFromItems(st, currentItems);
-          latest.grandPrix.push(gp);
+          chosen.grandPrix.push(gp);
           save();
-          toast('Grand Prix ajouté à « ' + latest.name + ' »');
-          location.hash = '#/session/' + latest.id + '/gp/' + gp.id;
+          toast('Grand Prix ajouté à « ' + chosen.name + ' »');
+          location.hash = '#/session/' + chosen.id + '/gp/' + gp.id;
         },
-      }, 'Lancer un Grand Prix dans « ' + latest.name + ' »'));
+      }, 'Lancer le Grand Prix'));
     }
     actionsBox.append(h('button', {
-      class: 'btn btn-outline btn-block', 'data-testid': 'button-new-session-draw',
+      class: 'btn ' + (latest ? 'btn-ghost' : 'btn-primary') + ' btn-block', 'data-testid': 'button-new-session-draw',
       onclick: () => {
         setPendingDraw(currentItems);
         location.hash = '#/nouvelle-session';
       },
-    }, 'Créer une session avec ce tirage'));
-    if (openSessions.length > 1) {
-      actionsBox.append(h('div', { class: 'stack' },
-        h('span', { class: 'sub' }, 'Ou choisir une autre session ouverte :'),
-        openSessions.map((s) => h('button', {
-          class: 'btn btn-ghost btn-block',
-          onclick: () => {
-            const gp = buildGpFromItems(st, currentItems);
-            s.grandPrix.push(gp);
-            save();
-            toast('Grand Prix ajouté à « ' + s.name + ' »');
-            location.hash = '#/session/' + s.id + '/gp/' + gp.id;
-          },
-        }, s.name))
-      ));
-    }
+    }, latest ? 'Créer une autre session' : 'Créer la session et jouer'));
   }
 
   const actionsBox = h('div', { class: 'stack' });
@@ -229,38 +300,38 @@ export function TirageView() {
   drawBtn.addEventListener('click', () => doDraw(false));
   rerollBtn.addEventListener('click', () => doDraw(true));
 
-  const uniqueToggle = mkToggle2(true, (v) => { unique = v; refreshInfo(); });
-  const recentToggle = mkToggle2(false, (v) => { excludeRecent = v; refreshInfo(); });
+  const uniqueToggle = mkToggle2(unique, (v) => { unique = v; changed(); });
+  uniqueToggle.setAttribute('aria-label', 'Sans doublon');
+  const recentToggle = mkToggle2(excludeRecent, (v) => { excludeRecent = v; changed(); });
+  recentToggle.setAttribute('aria-label', 'Éviter les cinq derniers tirages');
 
   refreshGames();
   refreshEditions();
   refreshInfo();
   drawResults();
 
-  return h('div', { class: 'stack fade-in' },
+  configBody.append(
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Choisir les jeux'), gamesBox),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Nombre de courses'),
+      h('div', { class: 'row draw-count' }, countPresets, countInput)),
+    h('details', { class: 'draw-options' },
+      h('summary', {}, 'Éditions, DLC et options'),
+      h('div', { class: 'stack' }, editionsBox,
+        h('div', { class: 'spread' }, h('span', {}, 'Sans doublon'), uniqueToggle),
+        h('div', { class: 'spread' }, h('span', {}, 'Éviter les 5 derniers tirages'), recentToggle))),
+    infoBox, drawBtn);
+
+  return h('div', { class: 'stack fade-in draw-page' },
     h('h1', { class: 'page-title' }, 'Tirage rapide'),
-    h('p', { class: 'sub' }, 'Tirez des circuits sans doublon — un ou plusieurs jeux mélangés — puis lancez directement un Grand Prix.'),
-    h('div', { class: 'card card-pad-lg stack' },
-      h('div', { class: 'field' },
-        h('span', { class: 'field-label' }, 'Jeux (plusieurs possibles)'),
-        gamesBox
-      ),
-      h('div', { class: 'field' },
-        h('span', { class: 'field-label' }, 'Éditions / extensions'),
-        editionsBox
-      ),
-      h('label', { class: 'field' },
-        h('span', { class: 'field-label' }, 'Nombre de contenus'),
-        countInput
-      ),
-      h('div', { class: 'spread' }, h('span', {}, 'Interdire les doublons'), uniqueToggle),
-      h('div', { class: 'spread' }, h('span', {}, 'Exclure les contenus des 5 derniers tirages'), recentToggle),
-      infoBox,
-      drawBtn
-    ),
-    rerollBtn,
-    resultsBox,
-    actionsBox
+    h('p', { class: 'sub' }, 'Choisissez. Tirez. Jouez.'),
+    h('div', { class: 'draw-layout' },
+      h('section', { class: 'card card-pad-lg stack draw-config', 'aria-label': 'Réglages du tirage' },
+        h('div', { class: 'spread' }, h('h2', { class: 'section-title', style: 'margin:0' }, 'Votre sélection'), editBtn),
+        configSummary, configBody),
+      h('section', { class: 'card card-pad-lg stack draw-output', 'aria-label': 'Résultat du tirage' },
+        h('div', { class: 'spread' }, resultsTitle, rerollBtn),
+        resultsHint, resultsBox,
+        h('div', { class: 'draw-launch stack' }, actionsBox)))
   );
 }
 

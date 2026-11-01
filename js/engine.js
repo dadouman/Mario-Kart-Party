@@ -25,6 +25,7 @@ export function drawItems(items, { count, unique = true, lockedIds = [], rng = M
   if (need < 0) return { error: 'locked_overflow', items: null };
 
   if (need === 0) return { items: [...locked] };
+  if (!pool.length) return { error: 'insufficient', available: 0, items: null };
 
   let candidates = pool;
   if (unique) {
