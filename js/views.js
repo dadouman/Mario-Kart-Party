@@ -15,10 +15,41 @@ import {
   sessionRanking, RACE_STATUSES, pointsFor,
 } from './engine.js';
 
+import { setPendingDraw, clearPendingDraw, getPendingDraw } from './pending.js';
+
 export { h };
 
 const S = () => getState();
 const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
+
+// Construit un objet Grand Prix à partir de contenus tirés (un ou plusieurs jeux).
+export function buildGpFromItems(st, items) {
+  const gameIds = [...new Set(items.map((c) => c.gameId).filter(Boolean))];
+  let gameName = 'Multi-jeux';
+  let gameIcon = '🎮';
+  let gameId = 'multi';
+  if (gameIds.length === 1) {
+    const g = st.games.find((x) => x.id === gameIds[0]);
+    if (g) { gameName = g.name; gameIcon = g.icon; gameId = g.id; }
+  }
+  const editionNames = [...new Set(items.map((c) => c.editionName).filter(Boolean))];
+  return {
+    id: newId('gp'),
+    gameId, gameName, gameIcon,
+    multiGame: gameIds.length > 1,
+    editionNames,
+    bareme: st.settings.bareme.slice(),
+    createdAt: Date.now(),
+    validated: false,
+    points: {},
+    history: [],
+    races: items.map((c, i) => ({
+      id: newId('r'), num: i + 1, contentId: c.id, contentName: c.name,
+      editionName: c.editionName, results: {},
+      gameId: c.gameId || null, gameName: c.gameName || null, gameIcon: c.gameIcon || null,
+    })),
+  };
+}
 
 // ---------- Petits composants ----------
 
@@ -198,15 +229,43 @@ export function NewSessionView() {
         grandPrix: [], draws: [],
       };
       st.sessions.push(session);
+      let pendingGp = null;
+      const pending = getPendingDraw();
+      if (pending && pending.length) {
+        pendingGp = buildGpFromItems(st, pending);
+        session.grandPrix.push(pendingGp);
+        clearPendingDraw();
+      }
       save();
       toast('Session créée');
-      location.hash = '#/session/' + session.id;
+      location.hash = pendingGp
+        ? '#/session/' + session.id + '/gp/' + pendingGp.id
+        : '#/session/' + session.id;
     },
   }, 'Créer la session');
 
+  const pending = getPendingDraw();
   const view = h('div', { class: 'stack fade-in' },
     h('a', { class: 'back-link', href: '#/' }, '← Accueil'),
     h('h1', { class: 'page-title' }, 'Nouvelle session'),
+    pending && pending.length
+      ? h('div', { class: 'card card-pad-lg stack', 'data-testid': 'card-pending-draw' },
+          h('div', { class: 'spread' },
+            h('div', {},
+              h('strong', {}, 'Tirage en attente'),
+              h('p', { class: 'sub', style: 'margin:4px 0 0' },
+                pending.length + ' courses tirées seront ajoutées comme premier Grand Prix :'),
+              h('p', { class: 'sub', style: 'margin:2px 0 0' },
+                pending.map((c) => (c.gameIcon ? c.gameIcon + ' ' : '') + c.name).join(' · '))
+            ),
+            h('button', {
+              class: 'btn btn-ghost btn-sm',
+              'data-testid': 'button-discard-draw',
+              onclick: () => { clearPendingDraw(); render(NewSessionView()); },
+            }, 'Annuler')
+          )
+        )
+      : null,
     h('div', { class: 'card card-pad-lg stack' },
       h('label', { class: 'field' },
         h('span', { class: 'field-label' }, 'Nom de la soirée'), nameInput),
@@ -258,39 +317,62 @@ export function SessionView(sessionId) {
       return;
     }
 
-    let selectedGame = games[0];
-    let selectedEditions = new Set(selectedGame.editions.filter((e) => e.active).map((e) => e.id));
+    // Multi-jeux : on peut sélectionner plusieurs jeux, les courses seront tirées
+    // dans l'union de leurs contenus (éditions actives par défaut).
+    const selectedGames = new Set(games.map((g) => g.id));
+    const editionsByGame = new Map(games.map((g) => [g.id, new Set(g.editions.filter((e) => e.active).map((e) => e.id))]));
     let raceCount = 4;
     let unique = true;
     let excludeRecent = false;
 
-    const gameSel = h('select', { class: 'select', 'aria-label': 'Jeu' },
-      games.map((g) => h('option', { value: g.id, selected: g === selectedGame }, g.icon + '  ' + g.name))
-    );
-    gameSel.addEventListener('change', () => {
-      selectedGame = findGame(gameSel.value);
-      selectedEditions = new Set(selectedGame.editions.filter((e) => e.active).map((e) => e.id));
-      refreshEditions();
-      refreshInfo();
-    });
-
+    const gamesBox = h('div', { class: 'stack' });
     const editionsBox = h('div', { class: 'stack' });
-    function refreshEditions() {
-      editionsBox.innerHTML = '';
-      selectedGame.editions.forEach((ed) => {
+    function refreshGames() {
+      gamesBox.innerHTML = '';
+      games.forEach((g) => {
         const cb = h('input', { type: 'checkbox' });
-        cb.checked = selectedEditions.has(ed.id);
+        cb.checked = selectedGames.has(g.id);
         cb.addEventListener('change', () => {
-          if (cb.checked) selectedEditions.add(ed.id);
-          else selectedEditions.delete(ed.id);
-          refreshInfo();
+          if (cb.checked) selectedGames.add(g.id);
+          else if (selectedGames.size > 1) selectedGames.delete(g.id);
+          else { cb.checked = true; toast('Gardez au moins un jeu sélectionné'); return; }
+          refreshGames(); refreshEditions(); refreshInfo();
         });
-        editionsBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' },
-          cb,
-          h('span', { class: 'content-name' }, ed.name + (ed.dlc ? ' (DLC)' : '')),
-          h('span', { class: 'badge' }, ed.contents.length + ' contenus')
+        const n = gameContents(g, [...editionsByGame.get(g.id)]).length;
+        gamesBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
+          h('span', { class: 'content-name' }, g.icon + '  ' + g.name),
+          h('span', { class: 'badge' }, n + ' contenus')
         ));
       });
+    }
+    function refreshEditions() {
+      editionsBox.innerHTML = '';
+      const sel = games.filter((g) => selectedGames.has(g.id));
+      if (sel.length > 1) {
+        editionsBox.append(h('span', { class: 'sub' }, 'Éditions actives de chaque jeu sélectionné :'));
+      }
+      sel.forEach((g) => {
+        if (sel.length > 1) editionsBox.append(h('div', { class: 'field-label', style: 'margin-top:4px' }, g.icon + '  ' + g.name));
+        g.editions.forEach((ed) => {
+          const cb = h('input', { type: 'checkbox' });
+          cb.checked = editionsByGame.get(g.id).has(ed.id);
+          cb.addEventListener('change', () => {
+            if (cb.checked) editionsByGame.get(g.id).add(ed.id);
+            else editionsByGame.get(g.id).delete(ed.id);
+            refreshInfo();
+          });
+          editionsBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
+            h('span', { class: 'content-name' }, ed.name + (ed.dlc ? ' (DLC)' : '')),
+            h('span', { class: 'badge' }, ed.contents.length + ' contenus')
+          ));
+        });
+      });
+    }
+
+    function currentPool() {
+      return games
+        .filter((g) => selectedGames.has(g.id))
+        .flatMap((g) => gameContents(g, [...editionsByGame.get(g.id)]));
     }
 
     const countInput = h('input', {
@@ -315,7 +397,7 @@ export function SessionView(sessionId) {
     }
 
     function refreshInfo() {
-      const contents = gameContents(selectedGame, [...selectedEditions]);
+      const contents = currentPool();
       const eligible = eligibleItems(contents, { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
       infoBox.textContent = eligible.length + ' contenus éligibles';
       if (!eligible.length) {
@@ -330,27 +412,12 @@ export function SessionView(sessionId) {
     }
 
     createBtn.addEventListener('click', () => {
-      const contents = gameContents(selectedGame, [...selectedEditions]);
+      const contents = currentPool();
       const res = drawItems(eligibleItems(contents, { excludeIds: excludeRecent ? [...usedContentIds()] : [] }), {
         count: raceCount, unique,
       });
       if (res.error) { refreshInfo(); return; }
-      const gp = {
-        id: newId('gp'),
-        gameId: selectedGame.id,
-        gameName: selectedGame.name,
-        gameIcon: selectedGame.icon,
-        editionNames: selectedGame.editions.filter((e) => selectedEditions.has(e.id)).map((e) => e.name),
-        bareme: st.settings.bareme.slice(),
-        createdAt: Date.now(),
-        validated: false,
-        points: {},
-        history: [],
-        races: res.items.map((c, i) => ({
-          id: newId('r'), num: i + 1, contentId: c.id, contentName: c.name,
-          editionName: c.editionName, results: {},
-        })),
-      };
+      const gp = buildGpFromItems(st, res.items);
       session.grandPrix.push(gp);
       save();
       close();
@@ -358,11 +425,15 @@ export function SessionView(sessionId) {
       location.hash = '#/session/' + session.id + '/gp/' + gp.id;
     });
 
+    refreshGames();
     refreshEditions();
     const close = modal({
       title: 'Nouveau Grand Prix',
       body: h('div', { class: 'stack' },
-        h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Jeu'), gameSel),
+        h('div', { class: 'field' },
+          h('span', { class: 'field-label' }, 'Jeux (plusieurs possibles)'),
+          gamesBox
+        ),
         h('div', { class: 'field' },
           h('span', { class: 'field-label' }, 'Éditions / extensions'),
           editionsBox
@@ -517,7 +588,9 @@ export function GpView(sessionId, gpId) {
         h('span', { class: 'race-num' }, String(race.num)),
         h('span', { style: 'flex:1;text-align:left;min-width:0' },
           h('span', { style: 'font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, race.contentName),
-          h('span', { class: 'sub', style: 'font-size:.78rem' }, race.editionName || '')
+          h('span', { class: 'sub', style: 'font-size:.78rem' },
+            (gp.multiGame && race.gameIcon ? race.gameIcon + ' ' + race.gameName + (race.editionName ? ' · ' + race.editionName : '') : (race.editionName || ''))
+          )
         ),
         done
           ? h('span', { class: 'badge badge-ok' }, 'Saisie')
@@ -692,7 +765,9 @@ export function RaceView(sessionId, gpId, raceNum) {
       h('div', { class: 'spread', style: 'margin-bottom:6px' },
         h('div', {},
           h('h2', { class: 'section-title', style: 'margin:0' }, 'Course ' + race.num + ' — ' + race.contentName),
-          h('p', { class: 'sub' }, race.editionName || '')
+          h('p', { class: 'sub' },
+            (gp.multiGame && race.gameIcon ? race.gameIcon + ' ' + race.gameName + (race.editionName ? ' · ' + race.editionName : '') : (race.editionName || ''))
+          )
         ),
         raceComplete(race) ? h('span', { class: 'badge badge-ok' }, 'Complète') : h('span', { class: 'badge' }, 'Saisie en cours')
       ),

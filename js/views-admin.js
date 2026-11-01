@@ -9,7 +9,8 @@ import {
 } from './store.js';
 import { h, render, toast, modal, confirmModal, fmtDateTime, download, readFile, avatarEl } from './ui.js';
 import { drawItems, eligibleItems, sessionRanking, allTimeStats, RACE_STATUSES } from './engine.js';
-import { NotFound, HomeView } from './views.js';
+import { NotFound, HomeView, buildGpFromItems } from './views.js';
+import { setPendingDraw } from './pending.js';
 
 const S = () => getState();
 const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
@@ -30,44 +31,64 @@ export function TirageView() {
     );
   }
 
-  let selectedGame = games[0];
-  let selectedEditions = new Set(selectedGame.editions.filter((e) => e.active).map((e) => e.id));
+  // Multi-jeux : le tirage peut mélanger les contenus de plusieurs jeux.
+  const selectedGames = new Set(games.map((g) => g.id));
+  const editionsByGame = new Map(games.map((g) => [g.id, new Set(g.editions.filter((e) => e.active).map((e) => e.id))]));
   let count = 4;
   let unique = true;
   let excludeRecent = false;
   let lockedIds = [];
   let currentItems = [];
 
-  const gameSel = h('select', { class: 'select', 'aria-label': 'Jeu', 'data-testid': 'select-draw-game' },
-    games.map((g) => h('option', { value: g.id, selected: g === selectedGame }, g.icon + '  ' + g.name))
-  );
-  gameSel.addEventListener('change', () => {
-    selectedGame = findGame(gameSel.value);
-    selectedEditions = new Set(selectedGame.editions.filter((e) => e.active).map((e) => e.id));
-    lockedIds = [];
-    currentItems = [];
-    refreshEditions();
-    refreshInfo();
-    drawResults();
-  });
-
+  const gamesBox = h('div', { class: 'stack' });
   const editionsBox = h('div', { class: 'stack' });
-  function refreshEditions() {
-    editionsBox.innerHTML = '';
-    selectedGame.editions.forEach((ed) => {
+  function refreshGames() {
+    gamesBox.innerHTML = '';
+    games.forEach((g) => {
       const cb = h('input', { type: 'checkbox' });
-      cb.checked = selectedEditions.has(ed.id);
+      cb.checked = selectedGames.has(g.id);
       cb.addEventListener('change', () => {
-        if (cb.checked) selectedEditions.add(ed.id);
-        else selectedEditions.delete(ed.id);
-        refreshInfo();
+        if (cb.checked) selectedGames.add(g.id);
+        else if (selectedGames.size > 1) selectedGames.delete(g.id);
+        else { cb.checked = true; toast('Gardez au moins un jeu sélectionné'); return; }
+        lockedIds = []; currentItems = [];
+        refreshGames(); refreshEditions(); refreshInfo(); drawResults();
       });
-      editionsBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' },
-        cb,
-        h('span', { class: 'content-name' }, ed.name + (ed.dlc ? ' (DLC)' : '')),
-        h('span', { class: 'badge' }, ed.contents.length + ' contenus')
+      const n = gameContents(g, [...editionsByGame.get(g.id)]).length;
+      gamesBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
+        h('span', { class: 'content-name' }, g.icon + '  ' + g.name),
+        h('span', { class: 'badge' }, n + ' contenus')
       ));
     });
+  }
+  function refreshEditions() {
+    editionsBox.innerHTML = '';
+    const sel = games.filter((g) => selectedGames.has(g.id));
+    if (sel.length > 1) {
+      editionsBox.append(h('span', { class: 'sub' }, 'Éditions actives de chaque jeu sélectionné :'));
+    }
+    sel.forEach((g) => {
+      if (sel.length > 1) editionsBox.append(h('div', { class: 'field-label', style: 'margin-top:4px' }, g.icon + '  ' + g.name));
+      g.editions.forEach((ed) => {
+        const cb = h('input', { type: 'checkbox' });
+        cb.checked = editionsByGame.get(g.id).has(ed.id);
+        cb.addEventListener('change', () => {
+          if (cb.checked) editionsByGame.get(g.id).add(ed.id);
+          else editionsByGame.get(g.id).delete(ed.id);
+          refreshInfo();
+        });
+        editionsBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
+          h('span', { class: 'content-name' }, ed.name + (ed.dlc ? ' (DLC)' : '')),
+          h('span', { class: 'badge' }, ed.contents.length + ' contenus')
+        ));
+      });
+    });
+  }
+
+  function currentPool() {
+    return games
+      .filter((g) => selectedGames.has(g.id))
+      .flatMap((g) => gameContents(g, [...editionsByGame.get(g.id)]));
   }
 
   const countInput = h('input', {
@@ -94,8 +115,7 @@ export function TirageView() {
   }
 
   function refreshInfo() {
-    const contents = gameContents(selectedGame, [...selectedEditions]);
-    const eligible = eligibleItems(contents, { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
+    const eligible = eligibleItems(currentPool(), { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
     if (!eligible.length) {
       infoBox.textContent = 'Aucun contenu éligible — activez des éditions ou vérifiez la bibliothèque.';
       drawBtn.disabled = true;
@@ -109,18 +129,19 @@ export function TirageView() {
   }
 
   function doDraw(keepLocked) {
-    const contents = gameContents(selectedGame, [...selectedEditions]);
-    const eligible = eligibleItems(contents, { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
+    const eligible = eligibleItems(currentPool(), { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
     const res = drawItems(eligible, { count, unique, lockedIds: keepLocked ? lockedIds : [] });
     if (res.error) { refreshInfo(); return; }
     currentItems = res.items;
     if (!keepLocked) lockedIds = [];
     drawResults();
-    // Historique des tirages (attaché à la session ouverte, sinon global via session fictive)
+    // Historique des tirages (attaché à la session ouverte, sinon global)
     if (keepLocked === undefined) {
       const sess = st.sessions.filter((s) => s.status === 'open').slice(-1)[0];
+      const gameNames = [...new Set(res.items.map((c) => c.gameName).filter(Boolean))];
       const entry = {
-        date: Date.now(), gameId: selectedGame.id, gameName: selectedGame.name,
+        date: Date.now(), gameId: gameNames.length === 1 ? res.items[0].gameId : 'multi',
+        gameName: gameNames.length === 1 ? gameNames[0] : 'Multi-jeux',
         contentIds: res.items.map((c) => c.id), names: res.items.map((c) => c.name),
       };
       if (sess) sess.draws.push(entry);
@@ -132,6 +153,7 @@ export function TirageView() {
   function drawResults() {
     resultsBox.innerHTML = '';
     rerollBtn.style.display = currentItems.length ? '' : 'none';
+    actionsBox.innerHTML = '';
     if (!currentItems.length) {
       resultsBox.append(h('p', { class: 'sub', style: 'text-align:center;padding:8px 0' },
         'Réglez les filtres puis lancez le tirage.'));
@@ -155,14 +177,54 @@ export function TirageView() {
       ));
       resultsBox.append(h('div', { class: 'card draw-card' },
         lockBtn,
-        h('div', { class: 'badge' }, selectedGame.icon + ' ' + (c.editionName || '')),
+        h('div', { class: 'badge' }, (c.gameIcon || '🎮') + ' ' + (c.editionName || '')),
         h('div', { class: 'draw-name', style: 'margin:8px 0 4px' }, c.name),
         c.status === 'unverified'
           ? h('span', { class: 'badge badge-warn' }, 'Nom à vérifier')
           : null
       ));
     });
+
+    // Actions : lancer un Grand Prix avec ce tirage.
+    const openSessions = st.sessions.filter((s) => s.status === 'open');
+    const latest = openSessions.slice(-1)[0];
+    if (latest) {
+      actionsBox.append(h('button', {
+        class: 'btn btn-primary btn-block', 'data-testid': 'button-gp-in-session',
+        onclick: () => {
+          const gp = buildGpFromItems(st, currentItems);
+          latest.grandPrix.push(gp);
+          save();
+          toast('Grand Prix ajouté à « ' + latest.name + ' »');
+          location.hash = '#/session/' + latest.id + '/gp/' + gp.id;
+        },
+      }, 'Lancer un Grand Prix dans « ' + latest.name + ' »'));
+    }
+    actionsBox.append(h('button', {
+      class: 'btn btn-outline btn-block', 'data-testid': 'button-new-session-draw',
+      onclick: () => {
+        setPendingDraw(currentItems);
+        location.hash = '#/nouvelle-session';
+      },
+    }, 'Créer une session avec ce tirage'));
+    if (openSessions.length > 1) {
+      actionsBox.append(h('div', { class: 'stack' },
+        h('span', { class: 'sub' }, 'Ou choisir une autre session ouverte :'),
+        openSessions.map((s) => h('button', {
+          class: 'btn btn-ghost btn-block',
+          onclick: () => {
+            const gp = buildGpFromItems(st, currentItems);
+            s.grandPrix.push(gp);
+            save();
+            toast('Grand Prix ajouté à « ' + s.name + ' »');
+            location.hash = '#/session/' + s.id + '/gp/' + gp.id;
+          },
+        }, s.name))
+      ));
+    }
   }
+
+  const actionsBox = h('div', { class: 'stack' });
 
   drawBtn.addEventListener('click', () => doDraw(false));
   rerollBtn.addEventListener('click', () => doDraw(true));
@@ -170,15 +232,19 @@ export function TirageView() {
   const uniqueToggle = mkToggle2(true, (v) => { unique = v; refreshInfo(); });
   const recentToggle = mkToggle2(false, (v) => { excludeRecent = v; refreshInfo(); });
 
+  refreshGames();
   refreshEditions();
   refreshInfo();
   drawResults();
 
   return h('div', { class: 'stack fade-in' },
     h('h1', { class: 'page-title' }, 'Tirage rapide'),
-    h('p', { class: 'sub' }, 'Tirez des circuits sans doublon, verrouillez vos préférés et relancez le reste.'),
+    h('p', { class: 'sub' }, 'Tirez des circuits sans doublon — un ou plusieurs jeux mélangés — puis lancez directement un Grand Prix.'),
     h('div', { class: 'card card-pad-lg stack' },
-      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Jeu'), gameSel),
+      h('div', { class: 'field' },
+        h('span', { class: 'field-label' }, 'Jeux (plusieurs possibles)'),
+        gamesBox
+      ),
       h('div', { class: 'field' },
         h('span', { class: 'field-label' }, 'Éditions / extensions'),
         editionsBox
@@ -193,7 +259,8 @@ export function TirageView() {
       drawBtn
     ),
     rerollBtn,
-    resultsBox
+    resultsBox,
+    actionsBox
   );
 }
 

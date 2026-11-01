@@ -234,5 +234,8 @@ export function activeGames() {
 
 export function gameContents(game, editionIds) {
   const eds = game.editions.filter((e) => editionIds.includes(e.id));
-  return eds.flatMap((e) => e.contents.map((c) => ({ ...c, editionName: e.name })));
+  return eds.flatMap((e) => e.contents.map((c) => ({
+    ...c, editionName: e.name,
+    gameId: game.id, gameName: game.name, gameIcon: game.icon,
+  })));
 }
