@@ -691,6 +691,9 @@ export function RaceView(sessionId, gpId, raceNum) {
 
   const players = getPlayers(session.playerIds);
   const n = players.length;
+  // Positions saisissables : jusqu'à la longueur du barème (12 par défaut),
+  // car les bots du jeu occupent les places entre les joueurs humains.
+  const maxPos = Math.max(n, gp.bareme.length);
 
   function conflicts() {
     const counts = {};
@@ -710,7 +713,7 @@ export function RaceView(sessionId, gpId, raceNum) {
       );
 
       const chips = h('div', { class: 'pos-grid' },
-        Array.from({ length: n }, (_, i) => i + 1).map((pos) => {
+        Array.from({ length: maxPos }, (_, i) => i + 1).map((pos) => {
           const sel = res.pos === pos;
           const takenByOther = !sel && taken.has(pos);
           const clash = sel && conflicts().includes(pos);
@@ -767,6 +770,9 @@ export function RaceView(sessionId, gpId, raceNum) {
           h('h2', { class: 'section-title', style: 'margin:0' }, 'Course ' + race.num + ' — ' + race.contentName),
           h('p', { class: 'sub' },
             (gp.multiGame && race.gameIcon ? race.gameIcon + ' ' + race.gameName + (race.editionName ? ' · ' + race.editionName : '') : (race.editionName || ''))
+          ),
+          h('p', { class: 'sub', style: 'font-size:.75rem' },
+            'Places de 1 à ' + maxPos + ' : les bots occupent les places entre les joueurs humains.'
           )
         ),
         raceComplete(race) ? h('span', { class: 'badge badge-ok' }, 'Complète') : h('span', { class: 'badge' }, 'Saisie en cours')
