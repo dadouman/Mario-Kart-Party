@@ -545,7 +545,7 @@ function mkToggle(initial, onChange) {
 
 // ---------- Grand Prix ----------
 
-export function GpView(sessionId, gpId) {
+export function GpView(sessionId, gpId, requestedRaceNum = null) {
   const st = S();
   const session = findSession(sessionId);
   const gp = session && session.grandPrix.find((g) => g.id === gpId);
@@ -553,8 +553,19 @@ export function GpView(sessionId, gpId) {
 
   const players = getPlayers(session.playerIds);
   const complete = gpComplete(gp, session.playerIds.length) && gpConflicts(gp).length === 0;
-  const provPoints = gpPoints(gp);
-  const rank = Object.entries(provPoints).sort((a, b) => b[1] - a[1]);
+  const widgets = new Map();
+  const ready = (r) => raceComplete(r, session.playerIds.length) && gpConflicts({ races: [r] }).length === 0;
+  let nextRace = gp.races.find((r) => !ready(r));
+  let activeRaceNum = gp.races.some((r) => r.num === requestedRaceNum) ? requestedRaceNum :
+    gp.validated ? null : nextRace?.num || null;
+  const progressCount = h('strong');
+  const progressState = h('span', { class: 'sub' });
+  const progress = h('progress', { max: gp.races.length, value: 0, 'aria-label': 'Progression des courses' });
+  const rankBox = h('div', { class: 'stack', 'data-testid': 'gp-live-ranking' });
+  const nextButton = h('button', {
+    class: 'btn btn-outline btn-block', 'data-testid': 'button-next-race',
+    onclick: () => { if (nextRace) openRace(nextRace.num); },
+  });
 
   const validateBtn = h('button', {
     class: 'btn btn-primary btn-block', 'data-testid': 'button-validate-gp',
@@ -578,39 +589,110 @@ export function GpView(sessionId, gpId) {
     },
   }, gp.validated ? 'Grand Prix validé' : 'Valider le Grand Prix');
 
-  const ready = (r) => raceComplete(r, session.playerIds.length) && gpConflicts({ races: [r] }).length === 0;
-  const nextRace = gp.races.find((r) => !ready(r));
-  const doneCount = gp.races.filter(ready).length;
+  function refreshGp() {
+    nextRace = gp.races.find((r) => !ready(r));
+    const doneCount = gp.races.filter(ready).length;
+    progressCount.textContent = doneCount + ' / ' + gp.races.length + ' courses saisies';
+    progress.value = doneCount;
+    progressState.textContent = gp.validated ? 'Grand Prix validé' :
+      nextRace ? 'À renseigner : course ' + nextRace.num : 'Prêt à valider';
+    nextButton.hidden = gp.validated || !nextRace || nextRace.num === activeRaceNum;
+    nextButton.textContent = nextRace ? 'Reprendre la course ' + nextRace.num : '';
+    validateBtn.disabled = gp.validated || !gpComplete(gp, players.length) || gpConflicts(gp).length > 0;
+    widgets.forEach((w, num) => {
+      const done = ready(w.race), open = num === activeRaceNum;
+      w.button.setAttribute('aria-expanded', String(open));
+      w.button.setAttribute('aria-current', open ? 'step' : 'false');
+      w.button.classList.toggle('done', done);
+      w.shell.classList.toggle('is-open', open);
+      w.step.classList.toggle('is-done', done);
+      w.step.classList.toggle('is-current', open && !gp.validated);
+      w.label.textContent = open ? (gp.validated ? 'RÉSULTATS' : 'COURSE OUVERTE') :
+        !gp.validated && w.race === nextRace ? 'PROCHAINE COURSE' :
+        num === gp.races[0].num ? 'DÉPART' :
+        num === gp.races.at(-1).num ? 'DERNIÈRE COURSE' : '';
+      w.label.hidden = !w.label.textContent;
+      w.badge.textContent = done ? 'Saisie' : open ? 'En cours' : 'À saisir';
+      w.badge.className = 'badge ' + (done ? 'badge-ok' : open ? 'badge-primary' : '');
+    });
+    rankBox.innerHTML = '';
+    const rank = Object.entries(gpPoints(gp)).sort((a, b) => b[1] - a[1]);
+    if (!rank.length) rankBox.append(h('p', { class: 'sub' }, 'Les points apparaîtront pendant la saisie.'));
+    rank.forEach(([pid, pts], i) => {
+      const player = players.find((p) => p.id === pid);
+      rankBox.append(h('div', { class: 'rank-row' + (i === 0 ? ' first' : '') },
+        h('span', { class: 'rank-pos' }, String(i + 1)),
+        player ? avatarEl(player) : null,
+        h('span', { style: 'font-weight:600' }, player?.name || '?'),
+        h('span', { class: 'rank-pts' }, pts + ' pts')));
+    });
+  }
+
+  function openRace(num, scroll = true) {
+    activeRaceNum = num;
+    widgets.forEach((w, raceNum) => {
+      const open = raceNum === num;
+      w.panel.hidden = !open;
+      if (open && !w.panel.firstChild) {
+        w.editor = ScoreEntry(sessionId, gpId, raceNum, {
+          onChange: refreshGp,
+          onSaved: (next) => {
+            openRace(next?.num || null);
+            if (!next) {
+              validateBtn.focus({ preventScroll: true });
+              validateBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          },
+        });
+        w.panel.append(w.editor);
+      }
+      if (open) w.editor.refreshScores();
+    });
+    refreshGp();
+    const current = widgets.get(num);
+    if (scroll && current) {
+      current.button.focus({ preventScroll: true });
+      current.shell.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   const raceList = h('ol', { class: 'race-timeline gp-timeline', 'aria-label': 'Chronologie du Grand Prix' },
     gp.races.map((race, index) => {
       const game = raceGame(race, gp);
       const done = ready(race);
-      const next = !gp.validated && race === nextRace;
+      const next = race.num === activeRaceNum;
+      const panelId = 'gp-score-panel-' + gp.id + '-' + race.num;
+      const panel = h('div', {
+        class: 'gp-inline-score', id: panelId, hidden: true,
+        role: 'region', 'aria-label': 'Scores de la course ' + race.num,
+      });
+      const badge = h('span', { class: 'badge' }, done ? 'Saisie' : 'À saisir');
       const btn = h('button', {
-        class: 'race-item timeline-card' + (done ? ' done' : '') + (next ? ' is-next' : ''),
+        class: 'race-item' + (done ? ' done' : ''),
         style: gameStyle(game),
         'data-testid': 'race-' + race.num,
-        'aria-current': next ? 'step' : null,
-        onclick: () => { location.hash = '#/session/' + sessionId + '/gp/' + gpId + '/course/' + race.num; },
+        'aria-controls': panelId, 'aria-expanded': String(next),
+        onclick: () => openRace(activeRaceNum === race.num ? null : race.num),
       },
         h('span', { style: 'flex:1;text-align:left;min-width:0' },
           gameBadge(game),
           h('span', { class: 'timeline-course-name' }, race.contentName),
           h('span', { class: 'sub', style: 'font-size:.75rem;display:block' }, race.editionName || 'Jeu de base')
         ),
-        done
-          ? h('span', { class: 'badge badge-ok' }, 'Saisie')
-          : h('span', { class: 'badge' + (next ? ' badge-primary' : '') }, next ? 'Jouer →' : 'À suivre')
+        h('span', { class: 'gp-race-summary' }, badge,
+          h('span', { class: 'gp-expand-mark', 'aria-hidden': 'true' }, '⌄'))
       );
-      return timelineStep({
+      const shell = h('div', { class: 'gp-race-shell timeline-card', style: gameStyle(game) }, btn, panel);
+      const step = timelineStep({
         index, game, previousGame: index ? raceGame(gp.races[index - 1], gp) : null,
-        card: btn, state: done ? 'is-done' : next ? 'is-current' : '',
-        label: next ? 'PROCHAINE COURSE' : index === 0 ? 'DÉPART' : index === gp.races.length - 1 ? 'DERNIÈRE COURSE' : '',
+        card: shell, label: ' ',
       });
+      widgets.set(race.num, { race, button: btn, badge, shell, panel, step, label: step.querySelector('.timeline-label') });
+      return step;
     })
   );
 
-  const view = h('div', { class: 'stack fade-in' },
+  const view = h('div', { class: 'stack fade-in gp-unified-page' },
     h('a', { class: 'back-link', href: '#/session/' + sessionId }, '← ' + session.name),
     h('div', { class: 'page-head' },
       h('div', {},
@@ -625,30 +707,17 @@ export function GpView(sessionId, gpId) {
     gameLegend(gp.races, gp),
     h('div', { class: 'card stack gp-progress' },
       h('div', { class: 'spread' },
-        h('strong', {}, doneCount + ' / ' + gp.races.length + ' courses saisies'),
-        h('span', { class: 'sub' }, gp.validated ? 'Grand Prix validé' : nextRace ? 'À jouer : course ' + nextRace.num : 'Prêt à valider')),
-      h('progress', { max: gp.races.length, value: doneCount, 'aria-label': 'Progression des courses' }),
-      !gp.validated && nextRace ? h('a', {
-        class: 'btn btn-primary btn-block', 'data-testid': 'button-next-race',
-        href: '#/session/' + sessionId + '/gp/' + gpId + '/course/' + nextRace.num,
-      }, 'Jouer la course ' + nextRace.num + ' · ' + nextRace.contentName) : null),
+        progressCount, progressState),
+      progress, nextButton),
     h('section', {},
       h('h2', { class: 'section-title' }, 'Le déroulé du Grand Prix'),
+      h('p', { class: 'sub gp-unified-help' }, 'Ouvre une course pour saisir les places juste dessous. Tout reste sur cette page.'),
       raceList,
       h('div', { class: 'timeline-finish' }, 'ARRIVÉE · ' + (gp.validated ? 'Grand Prix validé' : 'Validation du Grand Prix'))
     ),
     h('div', { class: 'card' },
       h('h2', { class: 'section-title' }, 'Points provisoires'),
-      rank.length
-        ? h('div', { class: 'stack' },
-            rank.map(([pid, pts], i) => h('div', { class: 'rank-row' + (i === 0 ? ' first' : '') },
-              h('span', { class: 'rank-pos' }, String(i + 1)),
-              (() => { const p = players.find((x) => x.id === pid); return p ? avatarEl(p) : null; })(),
-              h('span', { style: 'font-weight:600' }, (() => { const p = players.find((x) => x.id === pid); return p ? p.name : '?'; })()),
-              h('span', { class: 'rank-pts' }, pts + ' pts')
-            ))
-          )
-        : h('p', { class: 'sub' }, 'Saisissez les premières courses pour voir les points.')
+      rankBox
     ),
     gp.validated
       ? h('div', { class: 'card' },
@@ -698,12 +767,13 @@ export function GpView(sessionId, gpId) {
         }, 'Annuler le Grand Prix')
       : null
   );
+  openRace(activeRaceNum, false);
   return view;
 }
 
 // ---------- Saisie d'une course ----------
 
-export function RaceView(sessionId, gpId, raceNum) {
+function ScoreEntry(sessionId, gpId, raceNum, { onChange, onSaved } = {}) {
   const session = findSession(sessionId);
   const gp = session && session.grandPrix.find((g) => g.id === gpId);
   const race = gp && gp.races.find((r) => r.num === raceNum);
@@ -712,9 +782,10 @@ export function RaceView(sessionId, gpId, raceNum) {
   const players = getPlayers(session.playerIds);
   race.results = race.results || {};
   const controls = new Map();
-  const gpUrl = '#/session/' + sessionId + '/gp/' + gpId;
-  const next = gp.races.find((r) => r.num > race.num &&
-    (!raceComplete(r, players.length) || gpConflicts({ races: [r] }).length));
+  const getNext = () => gp.races.find((r) => r.num > race.num &&
+    (!raceComplete(r, players.length) || gpConflicts({ races: [r] }).length)) ||
+    gp.races.find((r) => r.num !== race.num &&
+      (!raceComplete(r, players.length) || gpConflicts({ races: [r] }).length));
   const message = h('p', { class: 'score-feedback sub', role: 'status', 'aria-live': 'polite' });
   const saveBtn = h('button', {
     class: 'btn btn-primary btn-block score-submit', disabled: true,
@@ -725,9 +796,9 @@ export function RaceView(sessionId, gpId, raceNum) {
         toast('Sauvegarde impossible sur cet appareil. Vos saisies restent disponibles dans cet onglet.', 'err');
         return;
       }
-      location.hash = gpUrl + (next ? '/course/' + next.num : '');
+      onSaved?.(getNext());
     },
-  }, next ? 'Enregistrer et passer à la course suivante' : 'Enregistrer et voir le bilan');
+  }, 'Enregistrer');
 
   function validPlace(raw) {
     return /^\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) && Number(raw) >= 1;
@@ -764,6 +835,7 @@ export function RaceView(sessionId, gpId, raceNum) {
     });
     const ready = !invalid && !clashes && filled === players.length;
     saveBtn.disabled = gp.validated || !ready;
+    saveBtn.textContent = getNext() ? 'Enregistrer et passer à la suivante' : 'Enregistrer et terminer la saisie';
     message.textContent = gp.validated ? 'Résultats validés. La saisie est verrouillée.' :
       clashes ? 'Deux joueurs ne peuvent pas avoir la même place.' :
       invalid ? 'Corrige les places signalées avant de continuer.' :
@@ -774,7 +846,7 @@ export function RaceView(sessionId, gpId, raceNum) {
 
   const rows = players.map((p, index) => {
     const res = race.results[p.id] || {};
-    const errorId = 'score-error-' + p.id;
+    const errorId = 'score-error-' + gp.id + '-' + race.num + '-' + p.id;
     const input = h('input', {
       class: 'score-place', type: 'text', inputmode: 'numeric', pattern: '[0-9]*',
       enterkeyhint: index < players.length - 1 ? 'next' : 'done',
@@ -790,6 +862,7 @@ export function RaceView(sessionId, gpId, raceNum) {
         else delete race.results[p.id];
         save();
         refreshFeedback();
+        onChange?.();
       },
       onkeydown: (e) => {
         if (e.key !== 'Enter') return;
@@ -816,6 +889,7 @@ export function RaceView(sessionId, gpId, raceNum) {
           input.value = '';
           save();
           refreshFeedback();
+          onChange?.();
           close();
           if (!key) input.focus();
         };
@@ -840,23 +914,25 @@ export function RaceView(sessionId, gpId, raceNum) {
     return row;
   });
   refreshFeedback();
-  return h('div', { class: 'stack fade-in score-page' },
-    h('a', { class: 'back-link', href: gpUrl }, '← Grand Prix'),
-    h('header', { class: 'stack score-heading' },
-      h('p', { class: 'score-course-number' }, 'COURSE ' + race.num + ' SUR ' + gp.races.length),
-      gameBadge(raceGame(race, gp)),
-      h('h1', { class: 'page-title' }, race.contentName),
-      h('p', { class: 'sub' }, 'Saisis la place affichée dans le jeu, bots compris.')),
-    gp.validated
-      ? h('div', { class: 'warn-banner' }, h('div', {}, 'Grand Prix validé : la saisie est verrouillée. Utilisez « Modifier » sur la page du GP pour corriger.'))
-      : null,
-    h('section', { class: 'card score-sheet', 'aria-label': 'Places et points des joueurs' },
+  const editor = h('div', { class: 'stack score-inline-editor' },
+    h('p', { class: 'sub score-inline-hint' }, 'Place réelle dans le jeu, bots compris.'),
+    h('section', { class: 'score-sheet', 'aria-label': 'Places et points de la course ' + race.num },
       h('div', { class: 'score-columns', 'aria-hidden': 'true' },
         h('span', {}, 'Joueur'), h('span', {}, 'Place'), h('span', {}, 'Points')),
       ...rows),
-    gp.validated ? h('a', { class: 'btn btn-outline btn-block', href: gpUrl }, 'Retour au Grand Prix')
+    gp.validated ? h('p', { class: 'sub score-feedback' }, 'Résultats validés · saisie verrouillée.')
       : h('div', { class: 'stack score-footer' }, message, saveBtn)
   );
+  editor.refreshScores = refreshFeedback;
+  return editor;
+}
+
+// Compatibilité avec les anciens liens : même écran, course demandée ouverte.
+export function RaceView(sessionId, gpId, raceNum) {
+  const session = findSession(sessionId);
+  const gp = session && session.grandPrix.find((g) => g.id === gpId);
+  if (!gp || !gp.races.some((r) => r.num === raceNum)) return NotFound();
+  return GpView(sessionId, gpId, raceNum);
 }
 
 // ---------- 404 ----------

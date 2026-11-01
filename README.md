@@ -31,6 +31,7 @@
   - historique des tirages.
 - **Grand Prix** : 4 courses par défaut (configurable), tirées au sort ou reprises d'un tirage rapide.
 - **Saisie des courses** :
+  - directement sous la course ouverte dans la chronologie du Grand Prix, sans changer de page ;
   - un **champ numérique par joueur** pour saisir sa place réelle, bots compris, et des points calculés automatiquement ;
   - statuts spéciaux via « N’a pas terminé » : Abandon, Absent, Forfait (0 point) ;
   - détection des conflits (deux joueurs sur la même place) avant validation.
@@ -79,14 +80,17 @@ une sélection périmée. Choisissez votre soirée dans le sélecteur, puis
 Chaque jeu dispose d'un badge nominatif et d'une couleur cohérente. Les courses
 sont reliées dans une chronologie numérotée, du départ à l'arrivée, avec un repère
 à chaque changement de jeu. L'écran du Grand Prix affiche la progression des
-saisies et un accès direct à la prochaine course incomplète ; les autres courses
-restent accessibles pour la saisie ou une correction.
+saisies et ouvre automatiquement la première course incomplète. Cliquez sur une
+course pour déplier ses champs de score juste dessous : une seule course est
+ouverte à la fois, sans navigation vers une autre page. Les autres courses
+restent accessibles pour la saisie ou une correction et les points provisoires
+se mettent à jour en direct. Les anciens liens vers une course restent compatibles.
 
 1. **Créez une soirée** — Accueil → « Nouvelle session » → ajoutez au moins 2 joueurs (12 maximum).
 2. **Tirez les courses** :
    - depuis la soirée : « Nouveau Grand Prix » — cochez un ou plusieurs jeux, choisissez les éditions, le nombre de courses, puis « Tirer les courses » ;
    - ou depuis l'onglet « Tirage » : tirez, verrouillez vos circuits préférés, relancez le reste, puis « Lancer un Grand Prix » ou « Créer une session avec ce tirage ».
-3. **Saisissez chaque course** — tapez la place réelle de chaque joueur dans son champ numérique. Les points s'affichent en direct ; une place au-delà du barème vaut 0 point. Les doublons et les valeurs invalides sont signalés. Utilisez « N’a pas terminé » pour les cas particuliers, puis « Enregistrer et passer à la course suivante ». Après la dernière course, le bouton ramène au bilan du Grand Prix. Les saisies partielles sont sauvegardées automatiquement ; le bouton d'enregistrement écrit immédiatement la sauvegarde avant de changer de course.
+3. **Saisissez chaque course sur la même page** — dans la chronologie, tapez la place réelle de chaque joueur sous la course ouverte. Les points s'affichent en direct ; une place au-delà du barème vaut 0 point. Les doublons et les valeurs invalides sont signalés. Utilisez « N’a pas terminé » pour les cas particuliers, puis « Enregistrer et passer à la suivante » : la prochaine course incomplète se déplie sur place. Après la dernière course, « Enregistrer et terminer la saisie » vous amène au bouton de validation, toujours sur la même page. Les saisies partielles sont sauvegardées automatiquement ; le bouton d'enregistrement écrit immédiatement la sauvegarde avant de passer à la suite.
 4. **Validez le Grand Prix** — une fois les 4 courses complètes et sans conflit, « Valider le Grand Prix » ajoute les points au classement de la soirée.
 5. **Corrigez si besoin** — « Modifier » sur le GP validé : chaque changement est horodaté dans l'historique d'audit.
 6. **Consultez les classements** — onglet « Classement » : par soirée ou toutes soirées, export CSV possible.
