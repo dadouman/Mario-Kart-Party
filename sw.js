@@ -1,5 +1,5 @@
 // Service worker : cache précautionneux pour le fonctionnement hors ligne.
-const CACHE = 'mkp-v3-quick-draw';
+const CACHE = 'mkp-v4-game-timeline';
 const ASSETS = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   'js/views.js',
   'js/views-admin.js',
   'js/pending.js',
+  'js/race-visuals.js',
   'manifest.webmanifest',
   'icon.svg',
   'icons/icon-192.png',

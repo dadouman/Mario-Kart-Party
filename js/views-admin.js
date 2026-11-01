@@ -11,6 +11,7 @@ import { h, render, toast, modal, confirmModal, fmtDateTime, download, readFile,
 import { drawItems, eligibleItems, sessionRanking, allTimeStats, RACE_STATUSES } from './engine.js';
 import { NotFound, HomeView, buildGpFromItems } from './views.js';
 import { setPendingDraw } from './pending.js';
+import { raceGame, gameStyle, gameBadge, gameLegend, timelineStep } from './race-visuals.js';
 
 const S = () => getState();
 const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
@@ -84,7 +85,7 @@ export function TirageView() {
       });
       const n = eligibleItems(gameContents(g, [...editionsByGame.get(g.id)]), {}).length;
       gamesBox.append(h('label', { class: 'draw-game' + (cb.checked ? ' selected' : '') }, cb,
-        h('span', { class: 'content-name' }, g.name),
+        h('span', { class: 'content-name' }, gameBadge({ id: g.id, name: g.name })),
         h('span', { class: 'sub' }, n + ' circuits')
       ));
     });
@@ -148,6 +149,7 @@ export function TirageView() {
   const drawBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-draw' }, 'Tirer au sort');
   const rerollBtn = h('button', { class: 'btn btn-outline btn-sm', 'data-testid': 'button-reroll' }, 'Relancer les courses libres');
   const resultsBox = h('div', { class: 'draw-results' });
+  const legendBox = h('div');
   const resultsTitle = h('h2', { class: 'section-title', style: 'margin:0', tabindex: '-1' }, 'Votre grille de départ');
   const resultsHint = h('p', { class: 'sub' });
 
@@ -224,6 +226,7 @@ export function TirageView() {
 
   function drawResults() {
     resultsBox.innerHTML = '';
+    legendBox.innerHTML = '';
     rerollBtn.style.display = currentItems.length ? '' : 'none';
     rerollBtn.disabled = currentItems.length > 0 && currentItems.every((c) => lockedIds.includes(c.id));
     resultsHint.textContent = currentItems.length
@@ -237,7 +240,11 @@ export function TirageView() {
         h('p', { class: 'sub' }, 'Un tirage, puis à vous de jouer.')));
       return;
     }
+    legendBox.append(gameLegend(currentItems));
+    const timeline = h('ol', { class: 'race-timeline', 'aria-label': 'Ordre des courses tirées' });
+    resultsBox.append(timeline);
     currentItems.forEach((c, index) => {
+      const game = raceGame(c);
       const locked = lockedIds.includes(c.id);
       const lockBtn = h('button', {
         class: 'lock-btn' + (locked ? ' on' : ''),
@@ -249,11 +256,14 @@ export function TirageView() {
           drawResults();
         },
       }, locked ? 'Gardée' : 'Garder');
-      resultsBox.append(h('div', { class: 'draw-course draw-card' + (locked ? ' is-locked' : '') },
-        h('span', { class: 'race-num' }, String(index + 1).padStart(2, '0')),
+      const card = h('div', {
+        class: 'draw-course draw-card timeline-card' + (locked ? ' is-locked' : ''),
+        style: gameStyle(game),
+      },
         h('div', { class: 'draw-course-copy' },
+          gameBadge(game),
           h('div', { class: 'draw-name' }, c.name),
-          h('div', { class: 'sub' }, (c.gameName || '') + ' · ' + (c.editionName || '')),
+          h('div', { class: 'sub' }, c.editionName || 'Jeu de base'),
           c.status === 'unverified' ? h('span', { class: 'badge badge-warn' }, 'À vérifier') : null),
         h('div', { class: 'draw-course-tools' }, lockBtn,
           h('button', {
@@ -261,8 +271,13 @@ export function TirageView() {
             'aria-label': 'Remplacer ' + c.name, 'data-testid': 'reroll-course-' + index,
             onclick: () => rerollOne(index),
           }, 'Changer'))
-      ));
+      );
+      timeline.append(timelineStep({
+        index, game, previousGame: index ? raceGame(currentItems[index - 1]) : null,
+        card, label: index === 0 ? 'DÉPART' : index === currentItems.length - 1 ? 'DERNIÈRE COURSE' : '',
+      }));
     });
+    resultsBox.append(h('div', { class: 'timeline-finish' }, 'ARRIVÉE · ' + currentItems.length + ' courses'));
 
     // Actions : lancer un Grand Prix avec ce tirage.
     const openSessions = st.sessions.filter((s) => s.status === 'open');
@@ -330,7 +345,7 @@ export function TirageView() {
         configSummary, configBody),
       h('section', { class: 'card card-pad-lg stack draw-output', 'aria-label': 'Résultat du tirage' },
         h('div', { class: 'spread' }, resultsTitle, rerollBtn),
-        resultsHint, resultsBox,
+        resultsHint, legendBox, resultsBox,
         h('div', { class: 'draw-launch stack' }, actionsBox)))
   );
 }

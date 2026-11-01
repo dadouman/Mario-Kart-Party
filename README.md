@@ -76,6 +76,12 @@ filtres efface les résultats précédents pour éviter de lancer un GP avec
 une sélection périmée. Choisissez votre soirée dans le sélecteur, puis
 **Lancer le Grand Prix**, ou créez une nouvelle session avec ces courses.
 
+Chaque jeu dispose d'un badge nominatif et d'une couleur cohérente. Les courses
+sont reliées dans une chronologie numérotée, du départ à l'arrivée, avec un repère
+à chaque changement de jeu. L'écran du Grand Prix affiche la progression des
+saisies et un accès direct à la prochaine course incomplète ; les autres courses
+restent accessibles pour la saisie ou une correction.
+
 1. **Créez une soirée** — Accueil → « Nouvelle session » → ajoutez au moins 2 joueurs (12 maximum).
 2. **Tirez les courses** :
    - depuis la soirée : « Nouveau Grand Prix » — cochez un ou plusieurs jeux, choisissez les éditions, le nombre de courses, puis « Tirer les courses » ;

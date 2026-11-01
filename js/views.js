@@ -16,6 +16,7 @@ import {
 } from './engine.js';
 
 import { setPendingDraw, clearPendingDraw, getPendingDraw } from './pending.js';
+import { raceGame, gameStyle, gameBadge, gameLegend, timelineStep } from './race-visuals.js';
 
 export { h };
 
@@ -577,26 +578,35 @@ export function GpView(sessionId, gpId) {
     },
   }, gp.validated ? 'Grand Prix validé' : 'Valider le Grand Prix');
 
-  const raceList = h('div', { class: 'stack' },
-    gp.races.map((race) => {
-      const done = raceComplete(race, session.playerIds.length);
+  const ready = (r) => raceComplete(r, session.playerIds.length) && gpConflicts({ races: [r] }).length === 0;
+  const nextRace = gp.races.find((r) => !ready(r));
+  const doneCount = gp.races.filter(ready).length;
+  const raceList = h('ol', { class: 'race-timeline gp-timeline', 'aria-label': 'Chronologie du Grand Prix' },
+    gp.races.map((race, index) => {
+      const game = raceGame(race, gp);
+      const done = ready(race);
+      const next = !gp.validated && race === nextRace;
       const btn = h('button', {
-        class: 'race-item' + (done ? ' done' : ''),
+        class: 'race-item timeline-card' + (done ? ' done' : '') + (next ? ' is-next' : ''),
+        style: gameStyle(game),
         'data-testid': 'race-' + race.num,
+        'aria-current': next ? 'step' : null,
         onclick: () => { location.hash = '#/session/' + sessionId + '/gp/' + gpId + '/course/' + race.num; },
       },
-        h('span', { class: 'race-num' }, String(race.num)),
         h('span', { style: 'flex:1;text-align:left;min-width:0' },
-          h('span', { style: 'font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, race.contentName),
-          h('span', { class: 'sub', style: 'font-size:.78rem' },
-            (gp.multiGame && race.gameIcon ? race.gameIcon + ' ' + race.gameName + (race.editionName ? ' · ' + race.editionName : '') : (race.editionName || ''))
-          )
+          gameBadge(game),
+          h('span', { class: 'timeline-course-name' }, race.contentName),
+          h('span', { class: 'sub', style: 'font-size:.75rem;display:block' }, race.editionName || 'Jeu de base')
         ),
         done
           ? h('span', { class: 'badge badge-ok' }, 'Saisie')
-          : h('span', { class: 'badge' }, 'À faire')
+          : h('span', { class: 'badge' + (next ? ' badge-primary' : '') }, next ? 'Jouer →' : 'À suivre')
       );
-      return btn;
+      return timelineStep({
+        index, game, previousGame: index ? raceGame(gp.races[index - 1], gp) : null,
+        card: btn, state: done ? 'is-done' : next ? 'is-current' : '',
+        label: next ? 'PROCHAINE COURSE' : index === 0 ? 'DÉPART' : index === gp.races.length - 1 ? 'DERNIÈRE COURSE' : '',
+      });
     })
   );
 
@@ -612,9 +622,20 @@ export function GpView(sessionId, gpId) {
         : h('span', { class: 'badge badge-primary' }, 'En cours')
     ),
     h('div', { class: 'flag-strip', 'aria-hidden': 'true' }),
+    gameLegend(gp.races, gp),
+    h('div', { class: 'card stack gp-progress' },
+      h('div', { class: 'spread' },
+        h('strong', {}, doneCount + ' / ' + gp.races.length + ' courses saisies'),
+        h('span', { class: 'sub' }, gp.validated ? 'Grand Prix validé' : nextRace ? 'À jouer : course ' + nextRace.num : 'Prêt à valider')),
+      h('progress', { max: gp.races.length, value: doneCount, 'aria-label': 'Progression des courses' }),
+      !gp.validated && nextRace ? h('a', {
+        class: 'btn btn-primary btn-block', 'data-testid': 'button-next-race',
+        href: '#/session/' + sessionId + '/gp/' + gpId + '/course/' + nextRace.num,
+      }, 'Jouer la course ' + nextRace.num + ' · ' + nextRace.contentName) : null),
     h('section', {},
-      h('h2', { class: 'section-title' }, 'Courses'),
-      raceList
+      h('h2', { class: 'section-title' }, 'Le déroulé du Grand Prix'),
+      raceList,
+      h('div', { class: 'timeline-finish' }, 'ARRIVÉE · ' + (gp.validated ? 'Grand Prix validé' : 'Validation du Grand Prix'))
     ),
     h('div', { class: 'card' },
       h('h2', { class: 'section-title' }, 'Points provisoires'),
@@ -767,9 +788,10 @@ export function RaceView(sessionId, gpId, raceNum) {
     box.append(
       h('div', { class: 'spread', style: 'margin-bottom:6px' },
         h('div', {},
-          h('h2', { class: 'section-title', style: 'margin:0' }, 'Course ' + race.num + ' — ' + race.contentName),
+          h('h2', { class: 'section-title', style: 'margin:0' }, 'Course ' + race.num + ' / ' + gp.races.length + ' — ' + race.contentName),
+          gameBadge(raceGame(race, gp)),
           h('p', { class: 'sub' },
-            (gp.multiGame && race.gameIcon ? race.gameIcon + ' ' + race.gameName + (race.editionName ? ' · ' + race.editionName : '') : (race.editionName || ''))
+            race.editionName || 'Jeu de base'
           ),
           h('p', { class: 'sub', style: 'font-size:.75rem' },
             'Places de 1 à ' + maxPos + ' : les bots occupent les places entre les joueurs humains.'
@@ -783,6 +805,17 @@ export function RaceView(sessionId, gpId, raceNum) {
       box.append(h('div', { class: 'warn-banner' },
         h('div', {}, 'Position' + (cf.length > 1 ? 's' : '') + ' ' + cf.join(', ') + ' attribuée' + (cf.length > 1 ? 's' : '') + ' à plusieurs joueurs : corrigez pour valider le GP.')
       ));
+    }
+    if (!gp.validated && raceComplete(race, players.length) && !cf.length) {
+      const next = gp.races.find((r) => r.num > race.num &&
+        (!raceComplete(r, players.length) || gpConflicts({ races: [r] }).length));
+      box.append(h('div', { class: 'card stack race-next' },
+        h('strong', {}, next ? 'Ensuite : course ' + next.num : 'Course saisie'),
+        next ? gameBadge(raceGame(next, gp)) : null,
+        h('a', {
+          class: 'btn btn-primary btn-block', 'data-testid': 'button-continue-race',
+          href: '#/session/' + sessionId + '/gp/' + gpId + (next ? '/course/' + next.num : ''),
+        }, next ? 'Continuer · ' + next.contentName : 'Revenir au bilan du Grand Prix')));
     }
   }
 
@@ -808,5 +841,3 @@ export function NotFound() {
     h('a', { class: 'btn btn-primary', href: '#/' }, 'Retour à l\u2019accueil')
   );
 }
-
-
