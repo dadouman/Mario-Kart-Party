@@ -6,6 +6,7 @@ import { render } from './ui.js';
 import { HomeView, NewSessionView, SessionView, GpView, RaceView, NotFound } from './views.js';
 import { TirageView, JeuxView, GameView, ClassementView, ReglagesView } from './views-admin.js';
 import { getState } from './store.js';
+import { initUpdates } from './updates.js';
 
 function route() {
   const hash = location.hash.replace(/^#/, '') || '/';
@@ -64,10 +65,5 @@ route();
   t.addEventListener('click', () => apply(current() === 'dark' ? 'light' : 'dark'));
 })();
 
-// ---------- Service worker (hors aperçu en iframe) ----------
-
-try {
-  if ('serviceWorker' in navigator && window.top === window.self && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
-} catch (e) { /* ignore */ }
+// ---------- Version et mise à jour PWA (hors aperçu en iframe) ----------
+initUpdates();

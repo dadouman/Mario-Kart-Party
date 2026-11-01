@@ -12,6 +12,7 @@ import { drawItems, eligibleItems, sessionRanking, allTimeStats, RACE_STATUSES }
 import { NotFound, HomeView, buildGpFromItems } from './views.js';
 import { setPendingDraw } from './pending.js';
 import { raceGame, gameStyle, gameBadge, gameLegend, timelineStep } from './race-visuals.js';
+import { APP_VERSION } from './updates.js';
 
 const S = () => getState();
 const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
@@ -1275,6 +1276,7 @@ export function ReglagesView() {
     h('h1', { class: 'page-title' }, 'Réglages'),
     h('div', { class: 'card card-pad-lg stack' },
       h('h2', { class: 'section-title' }, 'Application'),
+      h('p', { class: 'sub', 'data-testid': 'app-version' }, 'Version ' + APP_VERSION),
       h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Nom affiché'), nameInput),
       h('p', { class: 'sub' }, 'Thème : utilisez l\u2019icône lune/soleil dans l\u2019en-tête. L\u2019app suit le réglage de votre appareil par défaut.')
     ),

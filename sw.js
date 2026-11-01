@@ -1,5 +1,7 @@
-// Service worker : cache précautionneux pour le fonctionnement hors ligne.
-const CACHE = 'mkp-v6-inline-grand-prix';
+// Une version télécharge un ensemble cohérent, sans réutiliser le cache HTTP.
+// Incrémenter VERSION à chaque publication de l'application.
+const VERSION = '2026.11.01.3';
+const CACHE = 'mkp-v7-' + VERSION;
 const ASSETS = [
   './',
   'index.html',
@@ -12,6 +14,7 @@ const ASSETS = [
   'js/views-admin.js',
   'js/pending.js',
   'js/race-visuals.js',
+  'js/updates.js',
   'manifest.webmanifest',
   'icon.svg',
   'icons/icon-192.png',
@@ -19,33 +22,50 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
-  );
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(ASSETS.map(async (path) => {
+      const canonical = new URL(path, self.registration.scope);
+      const fresh = new URL(canonical);
+      fresh.searchParams.set('__mkp_release', VERSION);
+      const response = await fetch(fresh.href, { cache: 'reload' });
+      if (!response.ok) throw new Error('Installation incomplète : ' + path);
+      // Conserver la clé normale : les imports JS existants restent compatibles.
+      await cache.put(canonical.href, response);
+    }));
+    // N'activer le nouveau worker qu'après le téléchargement de TOUS les fichiers.
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith('mkp-') && k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(e.request)
-        .then((res) => {
-          if (res.ok && new URL(e.request.url).origin === self.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached || caches.match('index.html'));
-    })
-  );
+  const url = new URL(e.request.url);
+  const scope = new URL(self.registration.scope);
+  if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    // Les liens CSS/JS versionnés et les imports sans query partagent le même cache.
+    if (url.searchParams.get('v') === VERSION) url.search = '';
+    const cached = await cache.match(url.href);
+    if (cached) return cached;
+    try {
+      return await fetch(e.request);
+    } catch (error) {
+      // Ne jamais répondre avec du HTML à la place d'un module JavaScript.
+      if (e.request.mode === 'navigate') {
+        const index = await cache.match(new URL('index.html', scope).href);
+        if (index) return index;
+      }
+      throw error;
+    }
+  })());
 });

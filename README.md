@@ -50,6 +50,24 @@ Ouvrez simplement `index.html` dans un navigateur — aucune installation, aucun
 
 > **Note** : pour installer la PWA (et l'utiliser hors ligne sur mobile), servez le dossier via HTTPS. Voir [Héberger l'application](#héberger-lapplication).
 
+### Mises à jour de l'application
+
+Le numéro installé apparaît dans **Réglages → Application**. Chaque publication
+télécharge tous les fichiers avec un identifiant de version distinct pour ne
+pas recycler d'anciens fichiers du cache HTTP. Le nouveau service worker ne
+s'active que lorsque l'ensemble est prêt ; la page sauvegarde les saisies en
+attente avant de se recharger. Les sessions, scores, circuits et réglages ne
+sont pas effacés.
+
+Si vous venez d'une ancienne version qui n'avait pas encore ce mécanisme,
+rechargez normalement la page après la mise à jour. Ne videz pas les données du
+site et n'utilisez pas « Réinitialiser toutes les données » pour mettre à jour.
+Pour publier une nouvelle version, synchronisez `VERSION` dans `sw.js`,
+`APP_VERSION` dans `js/updates.js` et les paramètres `v` de `index.html`.
+
+Tests de non-régression du cache et de la sauvegarde avant mise à jour :
+`node --test tests/*.test.cjs` (Node.js 18 ou supérieur, sans dépendance).
+
 ### En local avec un serveur
 
 ```bash
