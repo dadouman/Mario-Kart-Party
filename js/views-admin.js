@@ -384,6 +384,88 @@ export function GameView(gameId) {
 
   function saveGame() { save(); render(GameView(gameId)); }
 
+  function manageContentsModal(edition) {
+    const selected = new Set();
+    const search = h('input', {
+      class: 'input', type: 'search', placeholder: 'Rechercher un circuit…',
+      'aria-label': 'Rechercher un circuit', 'data-testid': 'input-manage-search',
+    });
+    const list = h('div', { class: 'stack' });
+    const count = h('p', { class: 'sub', role: 'status', 'aria-live': 'polite' });
+    const visibleItems = () => edition.contents.filter((c) =>
+      c.status !== 'archived' && c.name.toLocaleLowerCase('fr').includes(search.value.trim().toLocaleLowerCase('fr')));
+    const removeBtn = h('button', {
+      class: 'btn btn-danger btn-block', disabled: true,
+      'data-testid': 'button-remove-selected',
+      onclick: () => {
+        const items = edition.contents.filter((c) => selected.has(c.id));
+        if (!items.length) return;
+        const usedIds = new Set(st.sessions.flatMap((s) =>
+          s.grandPrix.flatMap((g) => g.races.map((r) => r.contentId))));
+        const used = items.filter((c) => usedIds.has(c.id));
+        close();
+        confirmModal({
+          title: 'Supprimer les circuits sélectionnés ?',
+          message: items.length + ' circuit(s) sélectionné(s) : ' +
+            items.slice(0, 8).map((c) => c.name).join(', ') +
+            (items.length > 8 ? ', …' : '') + '. ' +
+            (used.length ? used.length + ' déjà utilisé(s) seront archivés et exclus des tirages pour préserver les résultats. ' : '') +
+            'Les autres seront supprimés définitivement.',
+          confirmLabel: 'Confirmer la suppression', danger: true,
+          onConfirm: () => {
+            edition.contents = edition.contents.filter((c) => {
+              if (!selected.has(c.id)) return true;
+              if (usedIds.has(c.id)) { c.status = 'archived'; c.active = false; return true; }
+              return false;
+            });
+            saveGame();
+            toast((items.length - used.length) + ' supprimé(s)' +
+              (used.length ? ' · ' + used.length + ' archivé(s)' : ''));
+          },
+        });
+      },
+    }, 'Supprimer la sélection');
+    function updateCount() {
+      count.textContent = selected.size + ' circuit(s) sélectionné(s)';
+      removeBtn.disabled = selected.size === 0;
+    }
+    function refreshList() {
+      list.innerHTML = '';
+      const items = visibleItems();
+      if (!items.length) list.append(h('p', { class: 'sub' }, 'Aucun circuit correspondant.'));
+      items.forEach((c) => {
+        const cb = h('input', {
+          type: 'checkbox', checked: selected.has(c.id),
+          'data-testid': 'select-content-' + c.id,
+          onchange: () => {
+            if (cb.checked) selected.add(c.id); else selected.delete(c.id);
+            updateCount();
+          },
+        });
+        list.append(h('label', { class: 'content-row', style: 'cursor:pointer' },
+          cb, h('span', { class: 'content-name' }, c.name)));
+      });
+      updateCount();
+    }
+    search.addEventListener('input', refreshList);
+    const close = modal({
+      title: 'Supprimer des circuits — ' + edition.name,
+      body: h('div', { class: 'stack' },
+        h('p', { class: 'sub' }, 'Cochez les circuits incorrects. Rien ne sera modifié avant confirmation.'),
+        search,
+        h('div', { class: 'row' },
+          h('button', { class: 'btn btn-outline btn-sm', onclick: () => {
+            visibleItems().forEach((c) => selected.add(c.id)); refreshList();
+          } }, 'Tout sélectionner (filtre)'),
+          h('button', { class: 'btn btn-ghost btn-sm', onclick: () => {
+            selected.clear(); refreshList();
+          } }, 'Tout désélectionner')),
+        count, list, removeBtn),
+      actions: [{ label: 'Annuler' }],
+    });
+    refreshList();
+  }
+
   function editGameModal() {
     const f = {
       name: h('input', { class: 'input', type: 'text', value: game.name }),
@@ -629,16 +711,29 @@ export function GameView(gameId) {
         return;
       }
       previewBox.append(h('span', { class: 'field-label' }, 'Aperçu — ' + total + ' contenu(s)'));
-      parsed.forEach((g) => {
+      parsed.forEach((g, groupIndex) => {
         const existing = new Set(game.editions.flatMap((e) => e.contents.map((c) => c.name.toLowerCase())));
         previewBox.append(h('div', { class: 'card', style: 'padding:10px 12px' },
           h('div', { class: 'spread' },
             h('strong', { style: 'font-size:.9rem' }, g.name ? '== ' + g.name + ' ==' : 'Sans section → édition cible'),
             h('span', { class: 'badge' }, g.contents.length + ' circuits')
           ),
-          h('div', { class: 'sub', style: 'margin-top:4px' },
-            g.contents.slice(0, 8).map((n) => existing.has(n.toLowerCase()) ? n + ' (doublon)' : n).join(' · ') +
-            (g.contents.length > 8 ? ' · …' : '')
+          h('div', { class: 'stack', style: 'margin-top:8px;max-height:280px;overflow:auto' },
+            g.contents.map((name, index) => h('div', { class: 'content-row' },
+              h('span', { class: 'content-name' }, name +
+                (existing.has(name.toLowerCase()) ? ' (doublon)' : '')),
+              h('button', {
+                class: 'btn btn-ghost btn-sm', 'aria-label': 'Retirer ' + name,
+                'data-testid': 'remove-preview-' + groupIndex + '-' + index,
+                onclick: () => {
+                  g.contents.splice(index, 1);
+                  ta.value = parsed.filter((group) => group.contents.length).map((group) =>
+                    (group.name ? '== ' + group.name + ' ==\n' : '') +
+                    group.contents.join('\n')).join('\n\n');
+                  refresh();
+                },
+              }, 'Retirer')
+            ))
           )
         ));
       });
@@ -696,7 +791,7 @@ export function GameView(gameId) {
 
     importBtn.addEventListener('click', () => {
       const parsed = parseList(ta.value);
-      if (!parsed.length) return;
+      if (!parsed.some((g) => g.contents.length)) return;
       let targetEd = null;
       if (edSel.value === '__new__') {
         targetEd = { id: newId('e'), name: newEdName.value.trim() || 'Nouvelle édition', dlc: newEdDlc.checked, active: true, contents: [] };
@@ -858,6 +953,10 @@ export function GameView(gameId) {
                 class: 'btn btn-ghost btn-sm', 'data-testid': 'button-add-contents-' + ed.id,
                 onclick: () => addContentsModal(ed),
               }, '+ Ajouter des contenus'),
+              h('button', {
+                class: 'btn btn-danger btn-sm', 'data-testid': 'button-manage-contents-' + ed.id,
+                onclick: () => manageContentsModal(ed),
+              }, 'Supprimer des circuits'),
               h('button', {
                 class: 'btn btn-outline btn-sm',
                 onclick: () => {

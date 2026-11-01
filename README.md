@@ -72,6 +72,19 @@ Puis ouvrez http://localhost:3000 et installez l'application depuis le menu du n
 
 ## Le catalogue de jeux
 
+### Nettoyer un import
+
+Avant de valider l'import, utilisez **Retirer** dans l'aperçu pour écarter
+chaque circuit incorrect. La liste et les compteurs sont mis à jour immédiatement.
+
+Après import, ouvrez **Jeux → votre jeu → édition → Supprimer des circuits**.
+Recherchez puis cochez les éléments à retirer, ou utilisez **Tout sélectionner
+(filtre)**. Cliquez sur **Supprimer la sélection**, puis confirmez.
+Les circuits jamais utilisés sont supprimés ; ceux présents dans un Grand Prix
+sont archivés et exclus des prochains tirages, sans modifier les anciens résultats.
+Vous pouvez annuler avant confirmation et vos choix sont conservés localement
+après validation.
+
 Le catalogue préchargé contient :
 
 | Jeu | Contenus | Statut |

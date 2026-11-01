@@ -1,5 +1,5 @@
 // Service worker : cache précautionneux pour le fonctionnement hors ligne.
-const CACHE = 'mkp-v1';
+const CACHE = 'mkp-v2-circuit-cleanup';
 const ASSETS = [
   './',
   'index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   'js/ui.js',
   'js/views.js',
   'js/views-admin.js',
+  'js/pending.js',
   'manifest.webmanifest',
   'icon.svg',
   'icons/icon-192.png',
