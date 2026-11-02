@@ -104,6 +104,15 @@ ouverte à la fois, sans navigation vers une autre page. Les autres courses
 restent accessibles pour la saisie ou une correction et les points provisoires
 se mettent à jour en direct. Les anciens liens vers une course restent compatibles.
 
+Le **podium du Grand Prix reste visible pendant le défilement** : colonne fixe
+à droite sur ordinateur, bandeau compact en haut sur téléphone et tablette.
+Les marches montrent les trois premiers joueurs et leurs points en direct.
+Les ex æquo partagent le même rang ; avant la première saisie, tous partent à
+égalité. Le bouton **Tout voir** ouvre le classement de tous les participants.
+Les repères numérotés sous le podium permettent d'ouvrir directement une course,
+avec la couleur du jeu et un état distinct pour les courses saisies ou ouvertes.
+La feuille de scores reste sur la même page, sans perte de focus à chaque frappe.
+
 1. **Créez une soirée** — Accueil → « Nouvelle session » → ajoutez au moins 2 joueurs (12 maximum).
 2. **Tirez les courses** :
    - depuis la soirée : « Nouveau Grand Prix » — cochez un ou plusieurs jeux, choisissez les éditions, le nombre de courses, puis « Tirer les courses » ;

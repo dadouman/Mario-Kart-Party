@@ -11,7 +11,7 @@ import {
   h, render, toast, modal, confirmModal, fmtDate, avatarEl,
 } from './ui.js';
 import {
-  drawItems, eligibleItems, raceComplete, gpComplete, gpPoints, gpConflicts,
+  drawItems, eligibleItems, raceComplete, gpComplete, gpPoints, gpConflicts, gpStandings,
   sessionRanking, RACE_STATUSES, pointsFor,
 } from './engine.js';
 
@@ -561,7 +561,48 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   const progressCount = h('strong');
   const progressState = h('span', { class: 'sub' });
   const progress = h('progress', { max: gp.races.length, value: 0, 'aria-label': 'Progression des courses' });
-  const rankBox = h('div', { class: 'stack', 'data-testid': 'gp-live-ranking' });
+  const rankBox = h('div', { class: 'gp-podium-stands', 'data-testid': 'gp-live-ranking' });
+  const podiumCaption = h('p', { class: 'gp-podium-caption' });
+  const routeButtons = new Map();
+  const route = h('nav', { class: 'gp-route', 'aria-label': 'Accès direct aux courses' },
+    gp.races.map((race) => {
+      const game = raceGame(race, gp);
+      const shortName = /mario kart.*8/i.test(game.name) ? 'MK8' :
+        /mario kart.*world/i.test(game.name) ? 'World' :
+        game.name.split(/\s+/).map((word) => word[0]).slice(0, 4).join('');
+      const button = h('button', {
+        class: 'gp-route-stop', style: gameStyle(game),
+        'data-testid': 'route-race-' + race.num,
+        'aria-label': 'Course ' + race.num + ' : ' + race.contentName + ', ' + game.name,
+        title: race.contentName + ' · ' + game.name,
+        onclick: () => openRace(race.num),
+      }, h('span', { class: 'gp-route-number' }, String(race.num).padStart(2, '0')),
+      h('span', { class: 'gp-route-game' }, shortName));
+      routeButtons.set(race.num, button);
+      return button;
+    }));
+  const podium = h('aside', {
+    class: 'gp-podium', 'aria-label': 'Podium du Grand Prix en direct', 'data-testid': 'gp-podium',
+  },
+    h('div', { class: 'gp-podium-heading' },
+      h('div', {}, h('h2', {}, 'Le podium'), podiumCaption),
+      h('button', {
+        class: 'gp-ranking-link', 'data-testid': 'button-full-ranking',
+        onclick: () => {
+          const standings = gpStandings(gp, players);
+          modal({
+            title: gp.validated ? 'Classement final du Grand Prix' : 'Classement provisoire du Grand Prix',
+            body: h('div', { class: 'stack' },
+              h('p', { class: 'sub' }, 'Les points incluent les saisies en cours. Les joueurs à égalité partagent le même rang.'),
+              standings.map(({ player, points, rank }) => h('div', { class: 'rank-row' + (rank === 1 ? ' first' : '') },
+                h('span', { class: 'rank-pos' }, String(rank)), avatarEl(player),
+                h('strong', { class: 'gp-full-rank-name' }, player.name),
+                h('span', { class: 'rank-pts' }, points + ' pts')))),
+            actions: [{ label: 'Fermer', kind: 'btn-outline', onClick: (close) => close() }],
+          });
+        },
+      }, 'Tout voir')),
+    rankBox, route);
   const nextButton = h('button', {
     class: 'btn btn-outline btn-block', 'data-testid': 'button-next-race',
     onclick: () => { if (nextRace) openRace(nextRace.num); },
@@ -614,17 +655,33 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       w.label.hidden = !w.label.textContent;
       w.badge.textContent = done ? 'Saisie' : open ? 'En cours' : 'À saisir';
       w.badge.className = 'badge ' + (done ? 'badge-ok' : open ? 'badge-primary' : '');
+      const stop = routeButtons.get(num);
+      stop.classList.toggle('is-done', done);
+      stop.classList.toggle('is-current', open);
+      stop.setAttribute('aria-current', open ? 'step' : 'false');
+      stop.setAttribute('aria-label', 'Course ' + num + ' : ' + w.race.contentName + ', ' +
+        raceGame(w.race, gp).name + (done ? ', saisie' : ', à saisir') + (open ? ', ouverte' : ''));
     });
     rankBox.innerHTML = '';
-    const rank = Object.entries(gpPoints(gp)).sort((a, b) => b[1] - a[1]);
-    if (!rank.length) rankBox.append(h('p', { class: 'sub' }, 'Les points apparaîtront pendant la saisie.'));
-    rank.forEach(([pid, pts], i) => {
-      const player = players.find((p) => p.id === pid);
-      rankBox.append(h('div', { class: 'rank-row' + (i === 0 ? ' first' : '') },
-        h('span', { class: 'rank-pos' }, String(i + 1)),
-        player ? avatarEl(player) : null,
-        h('span', { style: 'font-weight:600' }, player?.name || '?'),
-        h('span', { class: 'rank-pts' }, pts + ' pts')));
+    const standings = gpStandings(gp, players);
+    const tied = standings.some((row, index) => index && row.points === standings[index - 1].points);
+    const hasResults = gp.races.some((race) => Object.keys(race.results || {}).length);
+    podiumCaption.textContent = (gp.validated ? 'Final' : !hasResults ? 'Départ à égalité' : 'Provisoire') +
+      (tied && hasResults ? ' · ex æquo' : '') + ' · ' + doneCount + '/' + gp.races.length;
+    [1, 0, 2].forEach((index) => {
+      const row = standings[index];
+      const rank = row?.rank || index + 1;
+      const label = rank === 1 ? '1er' : rank + 'e';
+      rankBox.append(h('div', {
+        class: 'gp-podium-place tier-' + Math.min(rank, 3) + (!row ? ' is-empty' : ''),
+        'data-player-id': row?.player.id,
+        'aria-label': row ? row.player.name + ' : rang ' + rank + ', ' + row.points + ' points' : 'Place libre',
+      },
+        h('span', { class: 'gp-podium-name', title: row?.player.name || 'Place libre' }, row?.player.name || '—'),
+        h('strong', { class: 'gp-podium-points' }, row ? String(row.points) : '—',
+          h('span', {}, ' pts')),
+        h('div', { class: 'gp-podium-plinth', 'aria-hidden': 'true' },
+          h('span', {}, row ? label : '—'))));
     });
   }
 
@@ -692,33 +749,34 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     })
   );
 
-  const view = h('div', { class: 'stack fade-in gp-unified-page' },
+  const view = h('div', { class: 'fade-in gp-unified-page' },
+    h('header', { class: 'stack gp-intro' },
     h('a', { class: 'back-link', href: '#/session/' + sessionId }, '← ' + session.name),
     h('div', { class: 'page-head' },
       h('div', {},
-        h('h1', { class: 'page-title' }, gp.gameIcon + '  ' + gp.gameName),
-        h('p', { class: 'sub' }, gp.editionNames.join(' · ') || '\u00a0')
+        h('h1', { class: 'page-title' }, 'Grand Prix'),
+        h('p', { class: 'sub' }, gp.races.length + ' courses · ' +
+          new Set(gp.races.map((race) => raceGame(race, gp).id)).size + ' jeu(x)')
       ),
       gp.validated
         ? h('span', { class: 'badge badge-ok' }, 'Validé')
         : h('span', { class: 'badge badge-primary' }, 'En cours')
     ),
-    h('div', { class: 'flag-strip', 'aria-hidden': 'true' }),
-    gameLegend(gp.races, gp),
+    h('details', { class: 'gp-game-details' }, h('summary', {}, 'Jeux et éditions'),
+      gameLegend(gp.races, gp),
+      h('p', { class: 'sub' }, gp.editionNames.join(' · ')))),
+    podium,
+    h('section', { class: 'gp-chronology', 'aria-label': 'Chronologie et saisie des courses' },
     h('div', { class: 'card stack gp-progress' },
       h('div', { class: 'spread' },
         progressCount, progressState),
       progress, nextButton),
-    h('section', {},
-      h('h2', { class: 'section-title' }, 'Le déroulé du Grand Prix'),
-      h('p', { class: 'sub gp-unified-help' }, 'Ouvre une course pour saisir les places juste dessous. Tout reste sur cette page.'),
+      h('h2', { class: 'section-title' }, 'Course après course'),
+      h('p', { class: 'sub gp-unified-help' }, 'Saisis les places sous la course ouverte. Le podium suit en direct.'),
       raceList,
       h('div', { class: 'timeline-finish' }, 'ARRIVÉE · ' + (gp.validated ? 'Grand Prix validé' : 'Validation du Grand Prix'))
     ),
-    h('div', { class: 'card' },
-      h('h2', { class: 'section-title' }, 'Points provisoires'),
-      rankBox
-    ),
+    h('footer', { class: 'stack gp-actions' },
     gp.validated
       ? h('div', { class: 'card' },
           h('div', { class: 'spread' },
@@ -765,9 +823,15 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
             },
           }),
         }, 'Annuler le Grand Prix')
-      : null
+      : null)
   );
   openRace(activeRaceNum, false);
+  // Au chargement, montrer immédiatement la course à jouer, pas un long préambule.
+  requestAnimationFrame(() => {
+    if (view.isConnected && activeRaceNum) {
+      widgets.get(activeRaceNum)?.shell.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
+  });
   return view;
 }
 

@@ -117,6 +117,17 @@ export function gpPoints(gp) {
   return totals;
 }
 
+export function gpStandings(gp, players) {
+  const totals = gpPoints(gp);
+  const rows = players.map((player, index) => ({
+    player, points: totals[player.id] || 0, order: index,
+  })).sort((a, b) => b.points - a.points || a.order - b.order);
+  rows.forEach((row, index) => {
+    row.rank = index && row.points === rows[index - 1].points ? rows[index - 1].rank : index + 1;
+  });
+  return rows;
+}
+
 export function sessionRanking(session) {
   const totals = {};
   for (const pid of session.playerIds) totals[pid] = 0;

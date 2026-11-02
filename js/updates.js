@@ -1,7 +1,7 @@
 import { flushSave } from './store.js';
 import { toast } from './ui.js';
 
-export const APP_VERSION = '2026.11.01.3';
+export const APP_VERSION = '2026.11.02.1';
 
 export function initUpdates() {
   document.documentElement.dataset.appVersion = APP_VERSION;

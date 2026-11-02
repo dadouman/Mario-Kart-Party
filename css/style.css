@@ -753,6 +753,86 @@ h1, h2, h3, .display { font-family: var(--font-display); }
 
 .fade-in { animation: fade-in .25s; }
 
+/* GP : course au centre, podium persistant et navigation de manche. */
+.gp-unified-page { display: grid; grid-template-areas: "podium" "intro" "timeline" "actions"; gap: 20px; align-items: start; min-width: 0; }
+.gp-intro { grid-area: intro; gap: 10px; min-width: 0; }
+.gp-intro .back-link { margin: 0; }
+.gp-intro .page-head { margin: 0; }
+.gp-intro .page-head .sub { margin: 4px 0 0; font-size: .8rem; }
+.gp-game-details { font-size: .78rem; color: var(--text-muted); }
+.gp-game-details summary { cursor: pointer; width: fit-content; padding: 6px 0; }
+.gp-game-details .game-legend { padding-top: 8px; }
+.gp-game-details p { font-size: .75rem; margin-bottom: 0; }
+.gp-chronology { grid-area: timeline; min-width: 0; }
+.gp-chronology > .gp-progress { margin-bottom: 22px; gap: 10px; }
+.gp-progress strong { font-size: .85rem; }
+.gp-progress .sub { font-size: .75rem; }
+.gp-actions { grid-area: actions; min-width: 0; }
+.gp-podium { grid-area: podium; position: sticky; align-self: start; top: 66px; z-index: 30; height: 174px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 8px 24px #00000014; display: grid; grid-template-rows: 28px 78px 38px; gap: 4px; min-width: 0; }
+.gp-podium-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gp-podium-heading h2 { margin: 0; font-size: .85rem; font-weight: 750; }
+.gp-podium-caption { margin: 2px 0 0; color: var(--text-muted); font-size: .64rem; }
+.gp-ranking-link { padding: 6px 0 6px 10px; color: var(--text); text-decoration: underline; text-underline-offset: 3px; font-size: .72rem; }
+.gp-podium-stands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 6px; min-width: 0; }
+.gp-podium-place { --podium-color: #ab7a4b; --plinth-height: 12px; min-width: 0; text-align: center; }
+.gp-podium-place.tier-1 { --podium-color: var(--gold); --plinth-height: 28px; }
+.gp-podium-place.tier-2 { --podium-color: var(--text-muted); --plinth-height: 20px; }
+.gp-podium-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .76rem; font-weight: 650; }
+.gp-podium-points { display: block; font-family: var(--font-display); font-size: 1.35rem; line-height: 1.3; }
+.gp-podium-points > span { font-family: 'General Sans', sans-serif; font-size: .6rem; font-weight: 500; color: var(--text-muted); }
+.gp-podium-plinth { height: var(--plinth-height); margin-top: 3px; background: color-mix(in srgb, var(--podium-color) 18%, var(--surface)); border-top: 2px solid var(--podium-color); border-radius: 5px 5px 0 0; display: grid; place-items: center; font-size: .64rem; font-weight: 750; }
+.gp-podium-place.is-empty { opacity: .5; }
+.gp-route { display: flex; gap: 5px; min-width: 0; overflow-x: auto; scrollbar-width: thin; border-top: 1px solid var(--divider); padding-top: 5px; }
+.gp-route-stop { flex: 1 0 38px; min-width: 0; display: grid; justify-items: center; align-content: start; padding: 0 3px; border-radius: 5px; }
+.gp-route-number { display: block; font-family: var(--font-display); font-size: .72rem; font-weight: 750; padding: 0 8px; min-width: 28px; border-bottom: 2px solid var(--game-accent); }
+.gp-route-game { font-size: .56rem; font-weight: 650; color: var(--text-muted); margin-top: 2px; }
+.gp-route-stop.is-done .gp-route-number { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.gp-route-stop.is-current .gp-route-number { background: var(--primary); color: var(--on-primary); border-color: var(--primary); border-radius: 4px; }
+.gp-full-rank-name { min-width: 0; overflow-wrap: anywhere; }
+.gp-unified-page .gp-race-shell { scroll-margin-top: 264px; }
+.gp-unified-page .score-place { scroll-margin-top: 264px; }
+.gp-unified-page .score-submit { scroll-margin-bottom: 90px; }
+.gp-race-shell:not(.is-open) .timeline-course-name { margin-block: 5px 0; }
+.gp-race-shell:not(.is-open) .race-item > span:first-child > .sub { display: none !important; }
+@media (max-width: 719px) {
+  .gp-unified-page .gp-race-shell.is-open > .race-item { padding: 10px 12px; }
+  .gp-unified-page .score-row { padding-block: 8px; }
+  .gp-unified-page .score-place { height: 44px; font-size: 1.4rem; }
+  .gp-unified-page .score-status-link { padding-top: 4px; }
+  .gp-unified-page .score-inline-editor, .gp-unified-page .score-footer { gap: 8px; }
+  .gp-unified-page .score-inline-editor { padding-top: 10px; }
+  .gp-unified-page .score-feedback { font-size: .72rem; }
+}
+@media (min-width: 720px) {
+  .gp-podium { top: 70px; }
+}
+@media (max-width: 1023px) and (max-height: 540px) {
+  .gp-podium { height: 134px; grid-template-rows: 28px 50px 32px; padding-block: 7px; gap: 4px; }
+  .gp-podium-points { display: inline; font-size: 1rem; }
+  .gp-podium-name { font-size: .68rem; }
+  .gp-podium-plinth { height: 10px; font-size: .56rem; margin-top: 1px; }
+  .gp-route-game { display: none; }
+  .gp-unified-page .gp-race-shell { scroll-margin-top: 222px; }
+  .gp-unified-page .score-place { scroll-margin-top: 222px; }
+}
+@media (min-width: 1024px) {
+  #main:has(.gp-unified-page) { max-width: 1160px; }
+  .gp-unified-page { grid-template-columns: minmax(0, 1fr) 320px; grid-template-areas: "intro podium" "timeline podium" "actions podium"; column-gap: 32px; }
+  .gp-podium { top: 82px; height: auto; min-height: 310px; grid-template-rows: 44px 160px 52px; gap: 12px; padding: 20px; }
+  .gp-podium-heading h2 { font-size: 1.1rem; }
+  .gp-podium-caption { font-size: .72rem; margin-top: 5px; }
+  .gp-podium-name { font-size: .85rem; }
+  .gp-podium-points { font-size: 1.9rem; }
+  .gp-podium-place { --plinth-height: 36px; }
+  .gp-podium-place.tier-1 { --plinth-height: 76px; }
+  .gp-podium-place.tier-2 { --plinth-height: 56px; }
+  .gp-podium-plinth { font-size: .85rem; }
+  .gp-route-number { font-size: .85rem; }
+  .gp-route-game { font-size: .62rem; }
+  .gp-unified-page .gp-race-shell { scroll-margin-top: 106px; }
+  .gp-unified-page .score-place { scroll-margin-top: 106px; }
+}
+
 details.accord { border: 1px solid var(--divider); border-radius: 13px; background: var(--surface-2); }
 details.accord > summary {
   cursor: pointer;
