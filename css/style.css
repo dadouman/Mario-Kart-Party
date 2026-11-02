@@ -649,6 +649,34 @@ h1, h2, h3, .display { font-family: var(--font-display); }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
 
+/* Parcours : pages de travail, fenêtres courtes et actions contextuelles. */
+:root { --space-2: .5rem; --space-3: .75rem; --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem; }
+.resume-card { border-color: var(--primary); }
+.resume-card .sub { margin-bottom: 0; }
+.journey-steps { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); list-style: none; padding: 0; margin: 0; font-size: .8rem; color: var(--text-muted); }
+.journey-steps [aria-current] { color: var(--text); font-weight: 700; }
+.draw-output .section-title { scroll-margin-top: 90px; }
+.import-layout { display: grid; gap: var(--space-5); align-items: start; }
+.import-layout > *, .import-page .field, .import-page .row { min-width: 0; }
+.import-page .row > .field { min-width: 0 !important; }
+.import-page .sub, .import-page strong { overflow-wrap: anywhere; }
+.import-page [data-testid="textarea-ai-prompt"] { font-size: .85rem; line-height: 1.6; }
+.modal { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.modal-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--divider); flex: none; }
+.modal-heading h2 { margin: 0; align-self: center; }
+.modal-heading .icon-btn { flex: none; font-size: 1.5rem; }
+.modal-body { overflow-y: auto; padding: var(--space-5); overscroll-behavior: contain; }
+.modal-actions { justify-content: flex-end; padding: var(--space-3) var(--space-5); border-top: 1px solid var(--divider); flex: none; }
+@media (min-width: 960px) {
+  #main:has(.import-page) { max-width: 1120px; }
+  .import-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); }
+  .import-review { position: sticky; top: 86px; }
+  .import-review { max-height: max(320px, calc(100dvh - 270px)); display: flex; flex-direction: column; }
+  .import-review > :not(.import-preview) { flex: none; }
+  .import-preview { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .import-preview .card > .stack { max-height: none !important; overflow: visible !important; }
+}
+
 /* ---------- Tirage ---------- */
 .draw-card {
   position: relative;
@@ -789,6 +817,11 @@ h1, h2, h3, .display { font-family: var(--font-display); }
 .gp-route-stop.is-done .gp-route-number { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .gp-route-stop.is-current .gp-route-number { background: var(--primary); color: var(--on-primary); border-color: var(--primary); border-radius: 4px; }
 .gp-full-rank-name { min-width: 0; overflow-wrap: anywhere; }
+.gp-podium-stands[hidden], .gp-full-ranking[hidden] { display: none; }
+.gp-full-ranking { overflow-y: auto; overscroll-behavior: contain; min-height: 0; scrollbar-width: thin; }
+.gp-full-ranking .rank-row { padding: var(--space-2); gap: var(--space-2); font-size: .8rem; }
+.gp-full-ranking .rank-pos { min-width: 20px; font-size: .85rem; }
+.gp-full-ranking .rank-pts { font-size: .8rem; white-space: nowrap; }
 .gp-unified-page .gp-race-shell { scroll-margin-top: 264px; }
 .gp-unified-page .score-place { scroll-margin-top: 264px; }
 .gp-unified-page .score-submit { scroll-margin-bottom: 90px; }

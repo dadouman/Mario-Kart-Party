@@ -4,14 +4,14 @@
 
 import {
   getState, save, flushSave, lastSession, findSession, findGame, getPlayers,
-  activeGames, gameContents, newId, isPersistent,
+  newId, isPersistent,
 } from './store.js';
 import { PLAYER_COLORS } from './ui.js';
 import {
   h, render, toast, modal, confirmModal, fmtDate, avatarEl,
 } from './ui.js';
 import {
-  drawItems, eligibleItems, raceComplete, gpComplete, gpPoints, gpConflicts, gpStandings,
+  raceComplete, gpComplete, gpPoints, gpConflicts, gpStandings,
   sessionRanking, RACE_STATUSES, pointsFor,
 } from './engine.js';
 
@@ -73,6 +73,7 @@ export function HomeView() {
   const sessions = st.sessions;
   const gpsTotal = sessions.reduce((n, s) => n + s.grandPrix.filter((g) => g.validated).length, 0);
   const last = lastSession();
+  const resumeGp = last?.status === 'open' ? last.grandPrix.slice().reverse().find((gp) => !gp.validated) : null;
 
   const view = h('div', { class: 'stack fade-in' },
     h('div', {},
@@ -94,21 +95,23 @@ export function HomeView() {
       h('div', { class: 'stat-tile' }, h('div', { class: 'stat-val' }, String(st.players.length)), h('div', { class: 'stat-label' }, pl(st.players.length, 'Joueur')))
     ),
     last
-      ? h('a', { class: 'card card-click', href: '#/session/' + last.id, style: 'display:block;text-decoration:none' },
+      ? h('a', { class: 'card card-click resume-card', 'data-testid': 'link-resume', href: '#/session/' + last.id + (resumeGp ? '/gp/' + resumeGp.id : ''), style: 'display:block;text-decoration:none' },
           h('div', { class: 'spread' },
             h('div', {},
               h('div', { class: 'row', style: 'margin-bottom:2px' },
                 h('strong', {}, last.name),
                 last.status === 'open' ? h('span', { class: 'badge badge-ok' }, 'En cours') : h('span', { class: 'badge' }, 'Terminée')
               ),
-              h('div', { class: 'sub' }, fmtDate(last.date) + ' · ' + last.playerIds.length + ' joueurs')
+              h('div', { class: 'sub' }, resumeGp
+                ? 'Grand Prix en cours · ' + resumeGp.races.filter(raceComplete).length + '/' + resumeGp.races.length + ' courses saisies'
+                : fmtDate(last.date) + ' · ' + last.playerIds.length + ' joueurs')
             ),
-            h('span', { class: 'btn btn-ghost btn-sm' }, 'Reprendre')
+            h('span', { class: 'btn btn-primary btn-sm' }, resumeGp ? 'Reprendre les courses' : 'Ouvrir la session')
           )
         )
       : null,
     h('div', {},
-      h('a', { class: 'btn btn-primary btn-block', href: '#/nouvelle-session' }, 'Nouvelle session'),
+      h('a', { class: 'btn ' + (resumeGp ? 'btn-outline' : 'btn-primary') + ' btn-block', href: '#/nouvelle-session' }, 'Nouvelle session'),
       h('div', { class: 'row', style: 'margin-top:10px' },
         h('a', { class: 'btn btn-ghost', href: '#/tirage', style: 'flex:1' }, 'Tirage rapide'),
         h('a', { class: 'btn btn-ghost', href: '#/jeux', style: 'flex:1' }, 'Jeux')
@@ -238,12 +241,13 @@ export function NewSessionView() {
         clearPendingDraw();
       }
       save();
+      if (!flushSave()) return;
       toast('Session créée');
       location.hash = pendingGp
         ? '#/session/' + session.id + '/gp/' + pendingGp.id
-        : '#/session/' + session.id;
+        : '#/session/' + session.id + '/nouveau-gp';
     },
-  }, 'Créer la session');
+  }, getPendingDraw()?.length ? 'Créer la session et jouer' : 'Choisir les courses');
 
   const pending = getPendingDraw();
   const view = h('div', { class: 'stack fade-in' },
@@ -262,7 +266,11 @@ export function NewSessionView() {
             h('button', {
               class: 'btn btn-ghost btn-sm',
               'data-testid': 'button-discard-draw',
-              onclick: () => { clearPendingDraw(); render(NewSessionView()); },
+              onclick: (e) => {
+                clearPendingDraw();
+                e.currentTarget.closest('[data-testid="card-pending-draw"]').remove();
+                createBtn.textContent = 'Choisir les courses';
+              },
             }, 'Annuler')
           )
         )
@@ -306,152 +314,7 @@ export function SessionView(sessionId) {
   const players = getPlayers(session.playerIds);
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]));
 
-  function newGpModal() {
-    const games = activeGames();
-    if (!games.length) {
-      toast('Ajoutez d\u2019abord un jeu dans la bibliothèque', 'err');
-      location.hash = '#/jeux';
-      return;
-    }
-    if (session.playerIds.length < 2) {
-      toast('Il faut au moins 2 joueurs pour un Grand Prix', 'err');
-      return;
-    }
-
-    // Multi-jeux : on peut sélectionner plusieurs jeux, les courses seront tirées
-    // dans l'union de leurs contenus (éditions actives par défaut).
-    const selectedGames = new Set(games.map((g) => g.id));
-    const editionsByGame = new Map(games.map((g) => [g.id, new Set(g.editions.filter((e) => e.active).map((e) => e.id))]));
-    let raceCount = 4;
-    let unique = true;
-    let excludeRecent = false;
-
-    const gamesBox = h('div', { class: 'stack' });
-    const editionsBox = h('div', { class: 'stack' });
-    function refreshGames() {
-      gamesBox.innerHTML = '';
-      games.forEach((g) => {
-        const cb = h('input', { type: 'checkbox' });
-        cb.checked = selectedGames.has(g.id);
-        cb.addEventListener('change', () => {
-          if (cb.checked) selectedGames.add(g.id);
-          else if (selectedGames.size > 1) selectedGames.delete(g.id);
-          else { cb.checked = true; toast('Gardez au moins un jeu sélectionné'); return; }
-          refreshGames(); refreshEditions(); refreshInfo();
-        });
-        const n = gameContents(g, [...editionsByGame.get(g.id)]).length;
-        gamesBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
-          h('span', { class: 'content-name' }, g.icon + '  ' + g.name),
-          h('span', { class: 'badge' }, n + ' contenus')
-        ));
-      });
-    }
-    function refreshEditions() {
-      editionsBox.innerHTML = '';
-      const sel = games.filter((g) => selectedGames.has(g.id));
-      if (sel.length > 1) {
-        editionsBox.append(h('span', { class: 'sub' }, 'Éditions actives de chaque jeu sélectionné :'));
-      }
-      sel.forEach((g) => {
-        if (sel.length > 1) editionsBox.append(h('div', { class: 'field-label', style: 'margin-top:4px' }, g.icon + '  ' + g.name));
-        g.editions.forEach((ed) => {
-          const cb = h('input', { type: 'checkbox' });
-          cb.checked = editionsByGame.get(g.id).has(ed.id);
-          cb.addEventListener('change', () => {
-            if (cb.checked) editionsByGame.get(g.id).add(ed.id);
-            else editionsByGame.get(g.id).delete(ed.id);
-            refreshInfo();
-          });
-          editionsBox.append(h('label', { class: 'content-row', style: 'cursor:pointer' }, cb,
-            h('span', { class: 'content-name' }, ed.name + (ed.dlc ? ' (DLC)' : '')),
-            h('span', { class: 'badge' }, ed.contents.length + ' contenus')
-          ));
-        });
-      });
-    }
-
-    function currentPool() {
-      return games
-        .filter((g) => selectedGames.has(g.id))
-        .flatMap((g) => gameContents(g, [...editionsByGame.get(g.id)]));
-    }
-
-    const countInput = h('input', {
-      class: 'input', type: 'number', min: 1, max: 24, value: 4,
-      style: 'max-width:100px', 'aria-label': 'Nombre de courses',
-    });
-    countInput.addEventListener('input', () => {
-      raceCount = Math.max(1, Math.min(24, parseInt(countInput.value, 10) || 4));
-      refreshInfo();
-    });
-
-    const uniqueToggle = mkToggle(true, (v) => { unique = v; refreshInfo(); });
-    const recentToggle = mkToggle(false, (v) => { excludeRecent = v; refreshInfo(); });
-
-    const infoBox = h('p', { class: 'sub' });
-    const createBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-create-gp' }, 'Tirer les courses');
-
-    function usedContentIds() {
-      const ids = new Set();
-      for (const gp of session.grandPrix) for (const r of gp.races) if (r.contentId) ids.add(r.contentId);
-      return ids;
-    }
-
-    function refreshInfo() {
-      const contents = currentPool();
-      const eligible = eligibleItems(contents, { excludeIds: excludeRecent ? [...usedContentIds()] : [] });
-      infoBox.textContent = eligible.length + ' contenus éligibles';
-      if (!eligible.length) {
-        infoBox.textContent = 'Aucun contenu éligible — activez des éditions ou vérifiez la bibliothèque.';
-        createBtn.disabled = true;
-      } else if (unique && eligible.length < raceCount) {
-        infoBox.textContent = 'Seulement ' + eligible.length + ' contenus éligibles : réduisez le nombre de courses, élargissez les éditions ou autorisez les doublons.';
-        createBtn.disabled = true;
-      } else {
-        createBtn.disabled = false;
-      }
-    }
-
-    createBtn.addEventListener('click', () => {
-      const contents = currentPool();
-      const res = drawItems(eligibleItems(contents, { excludeIds: excludeRecent ? [...usedContentIds()] : [] }), {
-        count: raceCount, unique,
-      });
-      if (res.error) { refreshInfo(); return; }
-      const gp = buildGpFromItems(st, res.items);
-      session.grandPrix.push(gp);
-      save();
-      close();
-      toast(raceCount + ' courses tirées');
-      location.hash = '#/session/' + session.id + '/gp/' + gp.id;
-    });
-
-    refreshGames();
-    refreshEditions();
-    const close = modal({
-      title: 'Nouveau Grand Prix',
-      body: h('div', { class: 'stack' },
-        h('div', { class: 'field' },
-          h('span', { class: 'field-label' }, 'Jeux (plusieurs possibles)'),
-          gamesBox
-        ),
-        h('div', { class: 'field' },
-          h('span', { class: 'field-label' }, 'Éditions / extensions'),
-          editionsBox
-        ),
-        h('label', { class: 'field' },
-          h('span', { class: 'field-label' }, 'Nombre de courses'),
-          countInput
-        ),
-        h('div', { class: 'spread' }, h('span', {}, 'Interdire les doublons'), uniqueToggle),
-        h('div', { class: 'spread' }, h('span', {}, 'Exclure les circuits déjà joués cette session'), recentToggle),
-        infoBox,
-        createBtn
-      ),
-      actions: [{ label: 'Annuler' }],
-    });
-    refreshInfo();
-  }
+  const ongoing = session.grandPrix.slice().reverse().find((gp) => !gp.validated);
 
   const gpCards = session.grandPrix.map((gp) => {
     const done = gp.races.filter((r) => raceComplete(r)).length;
@@ -500,6 +363,12 @@ export function SessionView(sessionId) {
             }, 'Rouvrir')
           )
     ),
+    ongoing ? h('a', {
+      class: 'card resume-card spread', href: '#/session/' + sessionId + '/gp/' + ongoing.id,
+      'data-testid': 'link-resume-gp', style: 'text-decoration:none',
+    }, h('div', {}, h('strong', {}, 'Un Grand Prix vous attend'),
+      h('p', { class: 'sub' }, ongoing.races.filter(raceComplete).length + '/' + ongoing.races.length + ' courses saisies')),
+      h('span', { class: 'btn btn-primary btn-sm' }, 'Reprendre')) : null,
     h('div', { class: 'card' },
       h('h2', { class: 'section-title' }, 'Classement de la soirée'),
       ranking.length
@@ -514,11 +383,11 @@ export function SessionView(sessionId) {
         : h('p', { class: 'sub' }, 'Aucun Grand Prix validé pour l\u2019instant.')
     ),
     h('div', { class: 'row' },
-      h('button', {
-        class: 'btn btn-primary', 'data-testid': 'button-new-gp',
-        onclick: newGpModal, style: 'flex:1',
+      h('a', {
+        class: 'btn ' + (ongoing ? 'btn-outline' : 'btn-primary'), 'data-testid': 'button-new-gp',
+        href: '#/session/' + sessionId + '/nouveau-gp', style: 'flex:1',
       }, 'Nouveau Grand Prix'),
-      h('a', { class: 'btn btn-ghost', href: '#/tirage', style: 'flex:1' }, 'Tirage rapide')
+      h('a', { class: 'btn btn-ghost', href: '#/classement', style: 'flex:1' }, 'Classement général')
     ),
     h('section', {},
       h('h2', { class: 'section-title' }, 'Grands Prix'),
@@ -527,20 +396,6 @@ export function SessionView(sessionId) {
         : emptyState('Pas encore de Grand Prix', 'Lancez votre premier Grand Prix : les courses seront tirées au sort, puis vous saisirez les positions.', null)
     )
   );
-}
-
-function mkToggle(initial, onChange) {
-  const el = h('button', {
-    class: 'switch' + (initial ? ' on' : ''),
-    role: 'switch', 'aria-checked': String(initial),
-    onclick: () => {
-      const on = !el.classList.contains('on');
-      el.classList.toggle('on', on);
-      el.setAttribute('aria-checked', String(on));
-      onChange(on);
-    },
-  });
-  return el;
 }
 
 // ---------- Grand Prix ----------
@@ -562,6 +417,7 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   const progressState = h('span', { class: 'sub' });
   const progress = h('progress', { max: gp.races.length, value: 0, 'aria-label': 'Progression des courses' });
   const rankBox = h('div', { class: 'gp-podium-stands', 'data-testid': 'gp-live-ranking' });
+  const fullRanking = h('div', { class: 'gp-full-ranking', hidden: true, id: 'gp-full-ranking', 'data-testid': 'gp-full-ranking', tabindex: '0', 'aria-label': 'Classement de tous les joueurs' });
   const podiumCaption = h('p', { class: 'gp-podium-caption' });
   const routeButtons = new Map();
   const route = h('nav', { class: 'gp-route', 'aria-label': 'Accès direct aux courses' },
@@ -588,21 +444,15 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       h('div', {}, h('h2', {}, 'Le podium'), podiumCaption),
       h('button', {
         class: 'gp-ranking-link', 'data-testid': 'button-full-ranking',
-        onclick: () => {
-          const standings = gpStandings(gp, players);
-          modal({
-            title: gp.validated ? 'Classement final du Grand Prix' : 'Classement provisoire du Grand Prix',
-            body: h('div', { class: 'stack' },
-              h('p', { class: 'sub' }, 'Les points incluent les saisies en cours. Les joueurs à égalité partagent le même rang.'),
-              standings.map(({ player, points, rank }) => h('div', { class: 'rank-row' + (rank === 1 ? ' first' : '') },
-                h('span', { class: 'rank-pos' }, String(rank)), avatarEl(player),
-                h('strong', { class: 'gp-full-rank-name' }, player.name),
-                h('span', { class: 'rank-pts' }, points + ' pts')))),
-            actions: [{ label: 'Fermer', kind: 'btn-outline', onClick: (close) => close() }],
-          });
+        'aria-expanded': 'false', 'aria-controls': 'gp-full-ranking',
+        onclick: (e) => {
+          fullRanking.hidden = !fullRanking.hidden;
+          rankBox.hidden = !fullRanking.hidden;
+          e.currentTarget.textContent = fullRanking.hidden ? 'Tout voir' : 'Podium';
+          e.currentTarget.setAttribute('aria-expanded', String(!fullRanking.hidden));
         },
       }, 'Tout voir')),
-    rankBox, route);
+    rankBox, fullRanking, route);
   const nextButton = h('button', {
     class: 'btn btn-outline btn-block', 'data-testid': 'button-next-race',
     onclick: () => { if (nextRace) openRace(nextRace.num); },
@@ -613,20 +463,15 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     disabled: !complete || gp.validated,
     onclick: () => {
       if (gp.validated) return;
-      confirmModal({
-        title: 'Valider le Grand Prix ?',
-        message: 'Les points seront ajoutés au classement de la soirée. Une correction restera possible ensuite.',
-        confirmLabel: 'Valider',
-        onConfirm: () => {
-          gp.points = gpPoints(gp);
-          gp.validated = true;
-          gp.validatedAt = Date.now();
-          gp.history.push({ date: Date.now(), action: 'validation', note: 'Validé par l\u2019organisateur' });
-          save();
-          toast('Grand Prix validé — points ajoutés au classement');
-          render(GpView(sessionId, gpId));
-        },
-      });
+      if (!gpComplete(gp, players.length) || gpConflicts(gp).length) return;
+      gp.points = gpPoints(gp);
+      gp.validated = true;
+      gp.validatedAt = Date.now();
+      gp.history.push({ date: Date.now(), action: 'validation', note: 'Validé par l\u2019organisateur' });
+      save();
+      if (!flushSave()) return;
+      toast('Grand Prix validé : points ajoutés au classement');
+      render(GpView(sessionId, gpId));
     },
   }, gp.validated ? 'Grand Prix validé' : 'Valider le Grand Prix');
 
@@ -664,6 +509,11 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     });
     rankBox.innerHTML = '';
     const standings = gpStandings(gp, players);
+    fullRanking.replaceChildren(...standings.map(({ player, points, rank }) =>
+      h('div', { class: 'rank-row' + (rank === 1 ? ' first' : '') },
+        h('span', { class: 'rank-pos' }, String(rank)), avatarEl(player),
+        h('strong', { class: 'gp-full-rank-name' }, player.name),
+        h('span', { class: 'rank-pts' }, points + ' pts'))));
     const tied = standings.some((row, index) => index && row.points === standings[index - 1].points);
     const hasResults = gp.races.some((race) => Object.keys(race.results || {}).length);
     podiumCaption.textContent = (gp.validated ? 'Final' : !hasResults ? 'Départ à égalité' : 'Provisoire') +
@@ -749,6 +599,11 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     })
   );
 
+  const completion = gp.validated ? h('div', { class: 'card stack' },
+    h('strong', {}, 'Grand Prix terminé'),
+    h('p', { class: 'sub' }, 'Les points sont ajoutés au classement de la soirée. Vous pouvez encore corriger les résultats.'),
+    h('a', { class: 'btn btn-primary btn-block', href: '#/session/' + sessionId + '/nouveau-gp', 'data-testid': 'link-next-gp' }, 'Préparer le Grand Prix suivant'),
+    h('a', { class: 'btn btn-ghost btn-block', href: '#/session/' + sessionId }, 'Voir le classement de la soirée')) : null;
   const view = h('div', { class: 'fade-in gp-unified-page' },
     h('header', { class: 'stack gp-intro' },
     h('a', { class: 'back-link', href: '#/session/' + sessionId }, '← ' + session.name),
@@ -764,7 +619,8 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     ),
     h('details', { class: 'gp-game-details' }, h('summary', {}, 'Jeux et éditions'),
       gameLegend(gp.races, gp),
-      h('p', { class: 'sub' }, gp.editionNames.join(' · ')))),
+      h('p', { class: 'sub' }, gp.editionNames.join(' · '))),
+    completion),
     podium,
     h('section', { class: 'gp-chronology', 'aria-label': 'Chronologie et saisie des courses' },
     h('div', { class: 'card stack gp-progress' },

@@ -17,12 +17,14 @@ function route() {
     if (parts.length === 0) view = HomeView();
     else if (parts[0] === 'nouvelle-session') view = NewSessionView();
     else if (parts[0] === 'session' && parts[1] && !parts[2]) view = SessionView(parts[1]);
+    else if (parts[0] === 'session' && parts[1] && parts[2] === 'nouveau-gp') view = TirageView(parts[1]);
     else if (parts[0] === 'session' && parts[1] && parts[2] === 'gp' && parts[3] && !parts[4])
       view = GpView(parts[1], parts[3]);
     else if (parts[0] === 'session' && parts[1] && parts[2] === 'gp' && parts[3] && parts[4] === 'course' && parts[5])
       view = RaceView(parts[1], parts[3], parseInt(parts[5], 10));
     else if (parts[0] === 'tirage') view = TirageView();
     else if (parts[0] === 'jeux' && !parts[1]) view = JeuxView();
+    else if (parts[0] === 'jeux' && parts[1] && parts[2] === 'import') view = GameView(parts[1], { importing: true });
     else if (parts[0] === 'jeux' && parts[1]) view = GameView(parts[1]);
     else if (parts[0] === 'classement') view = ClassementView();
     else if (parts[0] === 'reglages') view = ReglagesView();

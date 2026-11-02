@@ -4,7 +4,7 @@
 // ============================================================
 
 import {
-  getState, save, findGame, newId, activeGames, gameContents,
+  getState, save, flushSave, findGame, findSession, newId, activeGames, gameContents,
   exportJSON, importJSON, resetAll, isPersistent, previousBackup,
 } from './store.js';
 import { h, render, toast, modal, confirmModal, fmtDateTime, download, readFile, avatarEl } from './ui.js';
@@ -19,8 +19,10 @@ const pl = (n, word) => n + ' ' + word + (n > 1 ? 's' : '');
 
 // ---------- Tirage rapide ----------
 
-export function TirageView() {
+export function TirageView(sessionId = null) {
   const st = S();
+  const targetSession = sessionId ? findSession(sessionId) : null;
+  if (sessionId && !targetSession) return NotFound();
   const games = activeGames();
   if (!games.length) {
     return h('div', { class: 'stack fade-in' },
@@ -157,6 +159,10 @@ export function TirageView() {
   function usedContentIds() {
     // Contenus déjà tirés lors des 5 derniers tirages enregistrés.
     const ids = new Set();
+    if (targetSession) {
+      targetSession.grandPrix.forEach(gp => gp.races.forEach(r => { if (r.contentId) ids.add(r.contentId); }));
+      return ids;
+    }
     const draws = [...(st.draws || []), ...st.sessions.flatMap((s) => s.draws || [])]
       .sort((a, b) => a.date - b.date).slice(-5);
     for (const d of draws) {
@@ -199,17 +205,20 @@ export function TirageView() {
     drawResults();
     configBody.hidden = true; editBtn.style.display = ''; editBtn.textContent = 'Modifier';
     resultsTitle.focus({ preventScroll: true });
-    resultsBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const headingBounds = resultsTitle.getBoundingClientRect();
+    if (headingBounds.top < 80 || headingBounds.bottom > innerHeight) {
+      resultsTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     // Historique des tirages (attaché à la session ouverte, sinon global)
     {
-      const sess = st.sessions.filter((s) => s.status === 'open').slice(-1)[0];
+      const sess = targetSession || st.sessions.filter((s) => s.status === 'open').slice(-1)[0];
       const gameNames = [...new Set(res.items.map((c) => c.gameName).filter(Boolean))];
       const entry = {
         date: Date.now(), gameId: gameNames.length === 1 ? res.items[0].gameId : 'multi',
         gameName: gameNames.length === 1 ? gameNames[0] : 'Multi-jeux',
         contentIds: res.items.map((c) => c.id), names: res.items.map((c) => c.name),
       };
-      if (sess) sess.draws.push(entry);
+      if (sess) (sess.draws ||= []).push(entry);
       else st.draws = [...(st.draws || []), entry];
       save();
     }
@@ -281,6 +290,22 @@ export function TirageView() {
     resultsBox.append(h('div', { class: 'timeline-finish' }, 'ARRIVÉE · ' + currentItems.length + ' courses'));
 
     // Actions : lancer un Grand Prix avec ce tirage.
+    if (targetSession) {
+      actionsBox.append(h('p', { class: 'sub' }, targetSession.name + ' · ' + targetSession.playerIds.length + ' joueurs'),
+        h('button', {
+          class: 'btn btn-primary btn-block', 'data-testid': 'button-gp-in-session',
+          disabled: targetSession.playerIds.length < 2 || targetSession.status !== 'open',
+          onclick: () => {
+            const gp = buildGpFromItems(st, currentItems);
+            targetSession.grandPrix.push(gp);
+            save();
+            if (!flushSave()) return;
+            location.hash = '#/session/' + targetSession.id + '/gp/' + gp.id;
+          },
+        }, 'Lancer ces ' + currentItems.length + ' courses'));
+      if (targetSession.status !== 'open') actionsBox.append(h('p', { class: 'sub' }, 'Rouvrez cette session avant de lancer un Grand Prix.'));
+      return;
+    }
     const openSessions = st.sessions.filter((s) => s.status === 'open');
     const validSessions = openSessions.filter((s) => s.playerIds.length >= 2);
     const latest = validSessions.slice(-1)[0];
@@ -297,6 +322,7 @@ export function TirageView() {
           const gp = buildGpFromItems(st, currentItems);
           chosen.grandPrix.push(gp);
           save();
+          if (!flushSave()) return;
           toast('Grand Prix ajouté à « ' + chosen.name + ' »');
           location.hash = '#/session/' + chosen.id + '/gp/' + gp.id;
         },
@@ -319,7 +345,7 @@ export function TirageView() {
   const uniqueToggle = mkToggle2(unique, (v) => { unique = v; changed(); });
   uniqueToggle.setAttribute('aria-label', 'Sans doublon');
   const recentToggle = mkToggle2(excludeRecent, (v) => { excludeRecent = v; changed(); });
-  recentToggle.setAttribute('aria-label', 'Éviter les cinq derniers tirages');
+  recentToggle.setAttribute('aria-label', targetSession ? 'Éviter les circuits déjà joués dans cette session' : 'Éviter les cinq derniers tirages');
 
   refreshGames();
   refreshEditions();
@@ -334,20 +360,24 @@ export function TirageView() {
       h('summary', {}, 'Éditions, DLC et options'),
       h('div', { class: 'stack' }, editionsBox,
         h('div', { class: 'spread' }, h('span', {}, 'Sans doublon'), uniqueToggle),
-        h('div', { class: 'spread' }, h('span', {}, 'Éviter les 5 derniers tirages'), recentToggle))),
+        h('div', { class: 'spread' }, h('span', {}, targetSession ? 'Éviter les circuits déjà joués' : 'Éviter les 5 derniers tirages'), recentToggle))),
     infoBox, drawBtn);
 
   return h('div', { class: 'stack fade-in draw-page' },
-    h('h1', { class: 'page-title' }, 'Tirage rapide'),
-    h('p', { class: 'sub' }, 'Choisissez. Tirez. Jouez.'),
+    targetSession ? h('a', { class: 'back-link', href: '#/session/' + targetSession.id }, '← ' + targetSession.name) : null,
+    h('h1', { class: 'page-title' }, targetSession ? 'Préparer le Grand Prix' : 'Tirage rapide'),
+    h('p', { class: 'sub' }, targetSession ? 'Choisissez vos jeux, vérifiez les courses, puis lancez le Grand Prix.' : 'Choisissez. Tirez. Jouez.'),
+    targetSession ? h('ol', { class: 'journey-steps', 'aria-label': 'Étapes du Grand Prix' },
+      h('li', {}, '1 · Joueurs prêts'), h('li', { 'aria-current': 'step' }, '2 · Choisir les courses'), h('li', {}, '3 · Jouer et saisir')) : null,
     h('div', { class: 'draw-layout' },
       h('section', { class: 'card card-pad-lg stack draw-config', 'aria-label': 'Réglages du tirage' },
         h('div', { class: 'spread' }, h('h2', { class: 'section-title', style: 'margin:0' }, 'Votre sélection'), editBtn),
         configSummary, configBody),
       h('section', { class: 'card card-pad-lg stack draw-output', 'aria-label': 'Résultat du tirage' },
         h('div', { class: 'spread' }, resultsTitle, rerollBtn),
-        resultsHint, legendBox, resultsBox,
-        h('div', { class: 'draw-launch stack' }, actionsBox)))
+        resultsHint,
+        h('div', { class: 'draw-launch stack' }, actionsBox),
+        legendBox, resultsBox))
   );
 }
 
@@ -464,7 +494,7 @@ export function JeuxView() {
   );
 }
 
-export function GameView(gameId) {
+export function GameView(gameId, { importing = false } = {}) {
   const st = S();
   const game = findGame(gameId);
   if (!game) return NotFound();
@@ -631,18 +661,19 @@ export function GameView(gameId) {
     });
   }
 
-  function importModal() {
+  function importPage() {
     // Import en masse : liste collée, fichier (txt/csv/json) ou recherche IA.
     // Les sections « == Nom == » ou « # Nom » découpent la liste en éditions
     // (ex. jeu de base vs DLC) : chaque édition est ensuite activable
     // indépendamment dans les tirages.
     let mode = 'liste';
 
-    const tabBtns = h('div', { class: 'row', style: 'flex-wrap:wrap;gap:8px' });
+    const tabBtns = h('div', { class: 'row', role: 'group', 'aria-label': 'Méthode d’import', style: 'flex-wrap:wrap;gap:8px' });
     const panes = { liste: h('div', { class: 'stack' }), fichier: h('div', { class: 'stack' }), ia: h('div', { class: 'stack' }) };
 
     const ta = h('textarea', {
       class: 'textarea', rows: 8, 'data-testid': 'textarea-import',
+      'aria-label': 'Liste des circuits',
       placeholder: 'Un circuit par ligne.\n\nPour découper la liste en éditions (ex. jeu de base / DLC), commencez un groupe par une ligne :\n== Jeu de base ==\n== Pass circuits ==\n\nLa numérotation (1. 2. 3.) est retirée automatiquement.',
     });
     ta.addEventListener('input', refresh);
@@ -759,14 +790,14 @@ export function GameView(gameId) {
 
     // Cible quand la liste n'a pas de sections
     const edSel = h('select', { class: 'select', 'aria-label': 'Édition cible', 'data-testid': 'select-target-edition' });
-    const newEdName = h('input', { class: 'input', type: 'text', placeholder: 'Nom de la nouvelle édition…' });
+    const newEdName = h('input', { class: 'input', type: 'text', placeholder: 'Nom de la nouvelle édition…', 'aria-label': 'Nom de la nouvelle édition' });
     const newEdDlc = h('input', { type: 'checkbox' });
     const statusSel = h('select', { class: 'select', 'aria-label': 'Statut' },
       h('option', { value: 'verified' }, 'Vérifié'),
       h('option', { value: 'unverified' }, 'À vérifier')
     );
     const sourceInput = h('input', { class: 'input', type: 'text', placeholder: 'Ex. : IA Perplexity, wiki…', value: '' });
-    const previewBox = h('div', { class: 'stack' });
+    const previewBox = h('div', { class: 'stack import-preview' });
     const importBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-import' }, 'Importer');
 
     function refreshEdSel() {
@@ -792,6 +823,7 @@ export function GameView(gameId) {
       previewBox.innerHTML = '';
       const total = parsed.reduce((s, g) => s + g.contents.length, 0);
       importBtn.disabled = total === 0;
+      importBtn.textContent = total ? 'Importer ' + total + ' circuit' + (total > 1 ? 's' : '') : 'Importer';
 
       if (!total) {
         previewBox.append(h('p', { class: 'sub', style: 'text-align:center' }, 'Rien à importer pour l\u2019instant.'));
@@ -840,6 +872,7 @@ export function GameView(gameId) {
         tabBtns.append(h('button', {
           class: 'btn btn-sm ' + (k === mode ? 'btn-primary' : 'btn-ghost'),
           'data-testid': 'tab-import-' + k,
+          'aria-pressed': String(k === mode),
           onclick: () => setMode(k),
         }, label));
       });
@@ -853,7 +886,7 @@ export function GameView(gameId) {
       h('div', { class: 'field' },
         h('span', { class: 'field-label' }, 'Édition cible (sans sections)'),
         edSel,
-        targetNew ? h('div', { class: 'row', style: 'margin-top:8px' }, newEdName) : null,
+        newEdName,
         h('label', { class: 'content-row', style: 'cursor:pointer;margin-top:6px' },
           newEdDlc, h('span', { class: 'content-name' }, 'Nouvelle édition = DLC / extension'))
       )
@@ -911,26 +944,33 @@ export function GameView(gameId) {
           added++;
         }
       }
-      saveGame();
+      save();
+      if (!flushSave()) return;
       close();
       toast(added + ' contenu(s) importé(s)' + (newEds ? ' · ' + newEds + ' édition(s) créée(s)' : '') + (dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''));
     });
 
-    const close = modal({
-      title: 'Importer des circuits — ' + game.name,
-      body: h('div', { class: 'stack' },
-        tabBtns,
-        panes.liste, panes.fichier, panes.ia,
-        h('div', { class: 'row', style: 'flex-wrap:wrap;gap:10px' },
+    const close = () => { location.hash = '#/jeux/' + game.id; };
+    const view = h('div', { class: 'stack fade-in import-page' },
+      h('a', { class: 'back-link', href: '#/jeux/' + game.id }, '← ' + game.name),
+      h('h1', { class: 'page-title' }, 'Importer des circuits'),
+      h('p', { class: 'sub' }, game.name + ' · Ajoutez une liste ou un fichier, puis vérifiez les circuits avant de les importer.'),
+      h('div', { class: 'import-layout' },
+        h('section', { class: 'card card-pad-lg stack', 'aria-label': 'Préparer les circuits' },
+          h('h2', { class: 'section-title' }, 'Préparer la liste'), tabBtns,
+          panes.liste, panes.fichier, panes.ia,
+          h('details', { class: 'draw-options' }, h('summary', {}, 'Statut et source des circuits'),
+            h('div', { class: 'row', style: 'flex-wrap:wrap;gap:10px' },
           h('label', { class: 'field', style: 'flex:1;min-width:130px' }, h('span', { class: 'field-label' }, 'Statut des imports'), statusSel),
           h('label', { class: 'field', style: 'flex:2;min-width:180px' }, h('span', { class: 'field-label' }, 'Source'), sourceInput)
-        ),
-        previewBox,
-        importBtn
-      ),
-      actions: [{ label: 'Fermer' }],
-    });
+            ))),
+        h('section', { class: 'card card-pad-lg stack import-review', 'aria-label': 'Vérifier et importer' },
+          h('h2', { class: 'section-title' }, 'Vérifier et importer'),
+          h('p', { class: 'sub' }, 'Retirez les erreurs dans l’aperçu. Aucun circuit n’est ajouté avant votre clic sur Importer.'),
+          previewBox, importBtn)));
+    edSel.dispatchEvent(new Event('change'));
     refresh();
+    return view;
   }
 
   function addEditionModal() {
@@ -984,6 +1024,7 @@ export function GameView(gameId) {
     }
   }
 
+  if (importing) return importPage();
   return h('div', { class: 'stack fade-in' },
     h('a', { class: 'back-link', href: '#/jeux' }, '← Bibliothèque'),
     h('div', { class: 'page-head' },
@@ -1009,7 +1050,7 @@ export function GameView(gameId) {
         : h('button', { class: 'btn btn-ghost btn-sm', onclick: () => { game.archived = true; saveGame(); toast('Jeu archivé — l\u2019historique est préservé'); } }, 'Archiver')
     ),
     h('div', { class: 'row' },
-      h('button', { class: 'btn btn-primary', 'data-testid': 'button-import-contents', onclick: importModal }, '📥 Importer des circuits'),
+      h('a', { class: 'btn btn-primary', 'data-testid': 'button-import-contents', href: '#/jeux/' + gameId + '/import' }, 'Importer des circuits'),
       h('button', { class: 'btn btn-outline', 'data-testid': 'button-add-edition', onclick: addEditionModal }, '+ Nouvelle édition'),
       h('span', { class: 'sub' }, 'Une édition = une liste de contenus activable indépendamment dans les tirages.')
     ),

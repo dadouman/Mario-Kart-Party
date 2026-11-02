@@ -49,21 +49,51 @@ export function toast(msg, kind = '') {
 
 // ---------- Modales ----------
 
-export function modal({ title, body, actions = [], onClose }) {
-  const root = document.getElementById('modal-root');
-  const close = () => {
-    root.innerHTML = '';
-    document.removeEventListener('keydown', esc);
-    if (onClose) onClose();
-  };
-  const esc = (e) => { if (e.key === 'Escape') close(); };
-  document.addEventListener('keydown', esc);
+let activeModalClose = null;
 
-  const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-    h('h2', { class: 'section-title' }, title),
-    body,
+export function modal({ title, body, actions = [], onClose }) {
+  activeModalClose?.();
+  const root = document.getElementById('modal-root');
+  const opener = document.activeElement;
+  const previousOverflow = document.body.style.overflow;
+  const background = [...document.body.children].filter(el =>
+    el !== root && el.tagName !== 'SCRIPT' && el.id !== 'toast-root');
+  const wasInert = background.map(el => el.inert);
+  background.forEach(el => { el.inert = true; });
+  document.body.style.overflow = 'hidden';
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    backdrop.remove();
+    document.removeEventListener('keydown', esc);
+    window.removeEventListener('hashchange', close);
+    background.forEach((el, i) => { el.inert = wasInert[i]; });
+    document.body.style.overflow = previousOverflow;
+    if (activeModalClose === close) activeModalClose = null;
+    if (onClose) onClose();
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  };
+  const esc = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key !== 'Tab') return;
+    const focusable = [...box.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')]
+      .filter(el => el.getClientRects().length > 0 && !el.closest('[hidden]'));
+    const first = focusable[0], last = focusable.at(-1);
+    if (!first) { e.preventDefault(); box.focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener('keydown', esc);
+  window.addEventListener('hashchange', close);
+
+  const box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title, tabindex: '-1' },
+    h('header', { class: 'modal-heading' },
+      h('h2', { class: 'section-title' }, title),
+      h('button', { class: 'icon-btn', 'aria-label': 'Fermer la fenêtre', onclick: close }, '×')),
+    h('div', { class: 'modal-body' }, body),
     actions.length
-      ? h('div', { class: 'row', style: 'justify-content:flex-end;margin-top:18px' },
+      ? h('footer', { class: 'row modal-actions' },
           ...actions.map((a) =>
             h('button', {
               class: 'btn ' + (a.kind || 'btn-ghost'),
@@ -74,8 +104,11 @@ export function modal({ title, body, actions = [], onClose }) {
         )
       : null
   );
-  const backdrop = h('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } }, box);
+  const backdrop = h('div', { class: 'modal-backdrop' }, box);
   root.append(backdrop);
+  activeModalClose = close;
+  box.querySelector('input:not([type="checkbox"]), textarea, select')?.focus({ preventScroll: true });
+  if (!box.contains(document.activeElement)) box.querySelector('button')?.focus({ preventScroll: true });
   return close;
 }
 

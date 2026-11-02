@@ -70,6 +70,28 @@ Party puis rouvrez l'application. Le worker attend volontairement la fermeture
 des anciennes versions pour éviter leur réécriture de données au rechargement.
 Les mises à jour entre versions sécurisées suivantes restent automatiques.
 
+### Parcours simplifié
+
+Depuis la version `2026.11.02.3`, la création d'une session conduit directement
+à la préparation du Grand Prix. Cette page réutilise le tirage rapide : choix
+des jeux, filtres d'éditions/DLC mémorisés, aperçu, verrouillage et remplacement
+des courses, puis lancement de la grille affichée dans la bonne session.
+L'accueil et la session proposent une reprise directe du Grand Prix en cours.
+
+Le classement complet se déplie dans le panneau du podium, sans fenêtre
+superposée. La validation du Grand Prix se fait en un clic et reste corrigeable ;
+les actions pour préparer le suivant ou consulter la soirée sont alors visibles.
+
+L'import de circuits dispose d'une page dédiée, avec liste/fichier/recherche IA
+d'un côté et aperçu à contrôler de l'autre sur ordinateur. Sur mobile, ces blocs
+se suivent. Le statut et la source sont des options secondaires ; les circuits
+ne sont ajoutés qu'après le clic sur Importer.
+
+Les fenêtres courtes restent utilisées pour les formulaires ponctuels et les
+confirmations sensibles. Elles disposent d'une fermeture explicite, d'une
+navigation clavier confinée à la fenêtre et d'actions séparées du contenu
+défilant. Un clic hors de la fenêtre ne ferme plus un formulaire par accident.
+
 Si vous venez d'une ancienne version qui n'avait pas encore ce mécanisme,
 rechargez normalement la page après la mise à jour. Ne videz pas les données du
 site et n'utilisez pas « Réinitialiser toutes les données » pour mettre à jour.
