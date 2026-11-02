@@ -59,6 +59,17 @@ s'active que lorsque l'ensemble est prêt ; la page sauvegarde les saisies en
 attente avant de se recharger. Les sessions, scores, circuits et réglages ne
 sont pas effacés.
 
+La sauvegarde ne réécrit rien si cet onglet n'a aucune modification en attente.
+Si un autre onglet a enregistré une version plus récente, l'écriture est
+bloquée : exportez le brouillon proposé avant de recharger la sauvegarde
+récente. Une copie de l'état précédent est conservée avant chaque écriture
+si l'espace local le permet, et peut être exportée depuis les réglages.
+
+**Migration vers 2026.11.02.2 :** fermez tous les onglets/fenêtres Mario Kart
+Party puis rouvrez l'application. Le worker attend volontairement la fermeture
+des anciennes versions pour éviter leur réécriture de données au rechargement.
+Les mises à jour entre versions sécurisées suivantes restent automatiques.
+
 Si vous venez d'une ancienne version qui n'avait pas encore ce mécanisme,
 rechargez normalement la page après la mise à jour. Ne videz pas les données du
 site et n'utilisez pas « Réinitialiser toutes les données » pour mettre à jour.

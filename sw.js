@@ -1,6 +1,6 @@
 // Une version télécharge un ensemble cohérent, sans réutiliser le cache HTTP.
 // Incrémenter VERSION à chaque publication de l'application.
-const VERSION = '2026.11.02.1';
+const VERSION = '2026.11.02.2';
 const CACHE = 'mkp-v7-' + VERSION;
 const ASSETS = [
   './',
@@ -23,6 +23,13 @@ const ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil((async () => {
+    // Migration de sécurité : ces anciennes versions réécrivent toute leur
+    // mémoire lors de controllerchange. Ne PAS déclencher cet événement.
+    // Le worker attendra la fermeture de leurs onglets avant de s'activer.
+    const existing = await caches.keys();
+    const unsafeLegacy = existing.some((name) =>
+      name.startsWith('mkp-v5') || name.startsWith('mkp-v6') ||
+      name === 'mkp-v7-2026.11.01.3' || name === 'mkp-v7-2026.11.02.1');
     const cache = await caches.open(CACHE);
     await Promise.all(ASSETS.map(async (path) => {
       const canonical = new URL(path, self.registration.scope);
@@ -34,7 +41,7 @@ self.addEventListener('install', (e) => {
       await cache.put(canonical.href, response);
     }));
     // N'activer le nouveau worker qu'après le téléchargement de TOUS les fichiers.
-    await self.skipWaiting();
+    if (!unsafeLegacy) await self.skipWaiting();
   })());
 });
 

@@ -82,6 +82,14 @@ test('an incomplete release never replaces the active offline version', async ()
   assert.ok((await w.caches.keys()).includes('mkp-v6-inline-grand-prix'));
 });
 
+test('unsafe legacy multi-tab clients must close before update activation', async () => {
+  const w = worker();
+  await w.caches.open('mkp-v7-2026.11.02.1');
+  await w.run('install');
+  assert.equal(w.activated, 0);
+  assert.ok((await w.caches.keys()).includes('mkp-v7-2026.11.02.1'));
+});
+
 test('activation removes only obsolete app caches', async () => {
   const w = worker();
   await w.caches.open('mkp-v6-inline-grand-prix');

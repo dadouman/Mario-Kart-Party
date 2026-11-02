@@ -149,11 +149,15 @@ function migrate(raw) {
 }
 
 let state;
+let lastPersisted = null;
+let dirty = false;
+let conflictNotified = false;
 
 function load() {
   if (persistent) {
     try {
       const raw = localStorage.getItem(KEY);
+      lastPersisted = raw;
       if (raw) {
         state = migrate(JSON.parse(raw));
         return;
@@ -167,15 +171,31 @@ function load() {
 let saveTimer = null;
 export function save() {
   if (!persistent) return;
+  dirty = true;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flushSave, 120);
 }
 
 export function flushSave() {
   clearTimeout(saveTimer);
-  if (!persistent) return true; // Repli mémoire dans l'aperçu intégré.
+  if (!persistent || !dirty) return true;
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    const current = localStorage.getItem(KEY);
+    if (current !== lastPersisted) {
+      if (!conflictNotified) {
+        conflictNotified = true;
+        window.dispatchEvent(new CustomEvent('mkp-storage-conflict'));
+      }
+      return false;
+    }
+    const next = JSON.stringify(state);
+    if (current && current !== next) {
+      try { localStorage.setItem('mkp-backup-previous', current); }
+      catch (error) { console.warn('Copie précédente indisponible', error); }
+    }
+    localStorage.setItem(KEY, next);
+    lastPersisted = next;
+    dirty = false;
     return true;
   } catch (e) {
     console.error('Sauvegarde impossible', e);
@@ -198,6 +218,11 @@ export function resetAll() {
 
 export function exportJSON() {
   return JSON.stringify(state, null, 2);
+}
+
+export function previousBackup() {
+  try { return persistent ? localStorage.getItem('mkp-backup-previous') : null; }
+  catch (error) { return null; }
 }
 
 export function importJSON(text) {

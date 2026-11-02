@@ -5,7 +5,7 @@
 
 import {
   getState, save, findGame, newId, activeGames, gameContents,
-  exportJSON, importJSON, resetAll, isPersistent,
+  exportJSON, importJSON, resetAll, isPersistent, previousBackup,
 } from './store.js';
 import { h, render, toast, modal, confirmModal, fmtDateTime, download, readFile, avatarEl } from './ui.js';
 import { drawItems, eligibleItems, sessionRanking, allTimeStats, RACE_STATUSES } from './engine.js';
@@ -1287,6 +1287,13 @@ export function ReglagesView() {
     ),
     h('div', { class: 'card card-pad-lg stack' },
       h('h2', { class: 'section-title' }, 'Données'),
+      h('button', {
+        class: 'btn btn-ghost', disabled: !previousBackup(), 'data-testid': 'button-export-previous',
+        onclick: () => {
+          const backup = previousBackup();
+          if (backup) download('mario-kart-party-sauvegarde-precedente.json', backup, 'application/json');
+        },
+      }, 'Exporter la sauvegarde précédente'),
       h('p', { class: 'sub' },
         isPersistent()
           ? 'Vos données sont enregistrées uniquement sur cet appareil (stockage local du navigateur). Exportez une sauvegarde régulièrement : effacer les données du navigateur supprimerait la sauvegarde.'
