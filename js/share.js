@@ -141,10 +141,12 @@ export async function drawShareCard({ session, gp, players }) {
   ctx.textBaseline = 'alphabetic';
 
   // En-tête du ticket.
-  ctx.fillStyle = INK; ctx.font = `700 30px ${BODY}`; ctx.textAlign = 'left';
-  ctx.fillText('GRAND PRIX N°' + String(story.gpNumber).padStart(2, '0'), L, Y0 + 80);
-  ctx.textAlign = 'right'; ctx.font = `500 28px ${BODY}`;
-  ctx.fillText(ellipsis(ctx, session.name, 420), R, Y0 + 80);
+  ctx.fillStyle = INK; ctx.textAlign = 'right'; ctx.font = `500 28px ${BODY}`;
+  const num = 'GP N°' + String(story.gpNumber).padStart(2, '0');
+  ctx.fillText(num, R, Y0 + 80);
+  const numW = ctx.measureText(num).width;
+  ctx.textAlign = 'left'; ctx.font = `700 30px ${BODY}`;
+  ctx.fillText(ellipsis(ctx, story.title.toUpperCase(), R - L - numW - 30), L, Y0 + 80);
   ctx.fillRect(L, Y0 + 104, R - L, 5);
 
   ctx.textAlign = 'left';
@@ -265,7 +267,7 @@ export async function openShare({ session, gp, players }) {
       onClick: async () => {
         // Certaines applis ignorent le texte joint à une image : on le copie aussi.
         await copyText(story.message);
-        try { await navigator.share({ files: [file], text: story.message, title: 'Grand Prix ' + story.gpNumber }); }
+        try { await navigator.share({ files: [file], text: story.message, title: story.title }); }
         catch (e) { if (e?.name !== 'AbortError') toast('Partage impossible', 'error'); }
       } });
   }
@@ -273,7 +275,7 @@ export async function openShare({ session, gp, players }) {
   modal({
     title: 'Partager le résultat',
     body: h('div', { class: 'share-box' },
-      h('img', { class: 'share-preview', src: url, alt: 'Carte du Grand Prix ' + story.gpNumber, 'data-testid': 'share-card' }),
+      h('img', { class: 'share-preview', src: url, alt: 'Carte : ' + story.title, 'data-testid': 'share-card' }),
       h('p', { class: 'share-text', 'data-testid': 'share-message' }, story.message)),
     actions,
     onClose: () => setTimeout(() => URL.revokeObjectURL(url), 1000),

@@ -4,9 +4,9 @@
 // jamais de doublon, circuits récents automatiquement moins probables.
 // ============================================================
 
-import { activeGames, gameContents, newId, save } from './store.js';
+import { activeGames, gameContents, newId, save, getPlayers } from './store.js';
 import { h, toast } from './ui.js';
-import { drawItems, eligibleItems, recencyMap } from './engine.js';
+import { drawItems, eligibleItems, recencyMap, gpName, gpNameContext } from './engine.js';
 import { gameBadge } from './race-visuals.js';
 
 const COUNT_PRESETS = [2, 4, 6, 8];
@@ -86,9 +86,17 @@ export function startGrandPrix(st, session) {
     return null;
   }
   const gp = buildGpFromItems(st, res.items);
+  gp.name = gpName(Math.random, gpNameContext(session, getPlayers(session.playerIds)));
   session.grandPrix.push(gp);
   save();
   return gp;
+}
+
+// Tire un autre nom pour un GP existant.
+export function renameGp(session, gp) {
+  gp.name = gpName(Math.random, gpNameContext(session, getPlayers(session.playerIds), gp));
+  save();
+  return gp.name;
 }
 
 // Remplace un circuit pas encore joué d'un GP par un autre, selon les préférences.
