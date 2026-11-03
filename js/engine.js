@@ -232,3 +232,85 @@ export function gpHighlights(gp, players) {
 }
 
 export const ordinal = (n) => n + (n === 1 ? 'er' : 'e');
+
+// ---------- Récap à partager ----------
+// Un petit texte « qui raconte » le GP, à envoyer dans un groupe.
+// Le choix des tournures dépend de l'identifiant du GP : le message reste
+// identique à chaque ouverture du récap.
+const pick = (list, seed) => list[[...String(seed)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % list.length];
+const ptsLabel = (n) => n + ' pt' + (n > 1 ? 's' : '');
+
+export function gpStory(session, gp, players, { url = '' } = {}) {
+  const gpNumber = session.grandPrix.indexOf(gp) + 1;
+  const standings = gpStandings(gp, players);
+  const name = (pid) => players.find((p) => p.id === pid)?.name || '?';
+  const races = gp.races.filter((r) => Object.keys(r.results || {}).length);
+  const leaders = standings.filter((r) => r.rank === 1);
+  const first = standings[0];
+  const second = standings.find((r) => r.rank > 1);
+  const last = standings.at(-1);
+  const margin = second ? first.points - second.points : 0;
+  const wins = {};
+  races.forEach((r) => raceWinners(r).forEach((pid) => { wins[pid] = (wins[pid] || 0) + 1; }));
+  const seed = gp.id || gpNumber;
+  const title = 'GP ' + gpNumber;
+
+  let kicker, headline;
+  if (!first) { kicker = 'Grand Prix'; headline = title + ' terminé.'; }
+  else if (leaders.length > 1) {
+    kicker = 'Égalité parfaite';
+    headline = title + ' : ' + leaders.map((r) => r.player.name).join(' et ') + ' à égalité, ' + ptsLabel(first.points) +
+      ' chacun. Seule une revanche peut les départager.';
+  } else if (races.length > 1 && wins[first.player.id] === races.length) {
+    kicker = 'Grand chelem';
+    headline = title + ' : ' + first.player.name + ' gagne les ' + races.length + ' courses. ' +
+      pick(['Les autres ont surtout vu ses pots d’échappement.', 'Personne n’a rien vu passer.', 'Une démonstration, rien d’autre.'], seed);
+  } else if (second && margin <= 3) {
+    kicker = 'Photo-finish';
+    headline = title + ' : ' + first.player.name + ' s’impose sur la ligne, ' + ptsLabel(margin) + ' devant ' + second.player.name + '. ' +
+      pick(['Ça s’est joué à un dérapage.', 'Il faudra revoir la vidéo.', 'Le cœur a lâché dans le dernier virage.'], seed);
+  } else if (second && margin >= 15) {
+    kicker = 'Démonstration';
+    headline = title + ' : ' + first.player.name + ' écrase la concurrence avec ' + ptsLabel(margin) + ' d’avance. ' +
+      pick(['Quelqu’un peut l’arrêter ?', 'Les autres réclament une enquête.', 'Le reste du peloton est encore sur la piste.'], seed);
+  } else {
+    kicker = 'Victoire';
+    headline = title + ' : ' + first.player.name + ' ' +
+      pick(['repart avec la coupe', 'monte sur la plus haute marche', 'met tout le monde d’accord'], seed) + ', ' + ptsLabel(first.points) + '.';
+  }
+
+  const lines = [];
+  const podium = standings.slice(0, 3).map((r) => r.rank + '. ' + r.player.name + ' ' + ptsLabel(r.points));
+  if (podium.length) lines.push(podium.join(' · '));
+
+  // Remontée et course serrée : on reprend les faits marquants du récap.
+  for (const f of gpHighlights(gp, players)) {
+    if (f.key === 'comeback') lines.push('Remontée du GP : ' + f.text.replace(' · ', ', de la ').replace(' → ', ' à la ') + ' place.');
+    if (f.key === 'tight' && kicker !== 'Photo-finish') lines.push('Course la plus serrée : ' + f.text.replace(' · ', ', ') + '.');
+  }
+
+  if (standings.length >= 3 && last.rank > 1 && standings.filter((r) => r.rank === last.rank).length === 1) {
+    lines.push(pick([
+      'Lanterne rouge : ' + last.player.name + ', ' + ptsLabel(last.points) + '. Les carapaces bleues ont bon dos.',
+      'Mention spéciale à ' + last.player.name + ', en queue de peloton avec ' + ptsLabel(last.points) + '. La revanche, c’est maintenant.',
+      last.player.name + ' ferme la marche avec ' + ptsLabel(last.points) + '. On parlera de malchance.',
+    ], seed + 'last'));
+  }
+
+  if (gpNumber > 1) {
+    const delta = sessionRankingDelta(session, gp.id);
+    const top = delta.filter((r) => r.rank === 1);
+    if (top.length === 1) {
+      const lead = top[0];
+      const runner = delta.find((r) => r.rank > 1);
+      lines.push('Soirée après ' + gpNumber + ' GP : ' + name(lead.pid) + (lead.delta > 0 ? ' prend la tête' : ' reste en tête') +
+        ' avec ' + ptsLabel(lead.pts) + (runner ? ', ' + name(runner.pid) + ' à ' + ptsLabel(lead.pts - runner.pts) + ' derrière' : '') + '.');
+    } else if (top.length > 1) {
+      lines.push('Soirée après ' + gpNumber + ' GP : ' + top.map((r) => name(r.pid)).join(' et ') + ' à égalité en tête.');
+    }
+  }
+
+  const cta = 'Qui relève le défi ?' + (url ? ' ' + url : '');
+  const message = [headline, '', ...lines, '', cta].join('\n');
+  return { gpNumber, kicker, headline, lines, standings, message };
+}

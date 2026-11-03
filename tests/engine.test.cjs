@@ -85,3 +85,26 @@ test('session ranking delta compares with the ranking before the GP', async () =
   assert.deepEqual(sessionRankingDelta(session, 'g1').map((r) => [r.pid, r.delta]), [['a', 0], ['b', 0]]);
   assert.deepEqual(sessionRankingDelta(session, 'g2').map((r) => [r.pid, r.rank, r.delta]), [['b', 1, 1], ['a', 2, -1]]);
 });
+
+test('share story tells the GP with a fun headline and the session lead', async () => {
+  const { gpStory } = await engine;
+  const gp1 = { id: 'g1', bareme: B, races: [
+    { contentName: 'R1', results: { a: { pos: 1 }, b: { pos: 2 }, c: { pos: 6 } } },
+    { contentName: 'R2', results: { a: { pos: 1 }, b: { pos: 3 }, c: { pos: 7 } } },
+  ] };
+  const gp2 = { id: 'g2', bareme: B, races: [
+    { contentName: 'R3', results: { a: { pos: 9 }, b: { pos: 1 }, c: { pos: 2 } } },
+  ] };
+  const session = { playerIds: ['a', 'b', 'c'], grandPrix: [gp1, gp2] };
+  const s1 = gpStory(session, gp1, ps, { url: 'https://x.test/' });
+  assert.equal(s1.kicker, 'Grand chelem');
+  assert.match(s1.headline, /^GP 1 : A gagne les 2 courses/);
+  assert.match(s1.message, /1\. A .* · 2\. B .* · 3\. C/);
+  assert.match(s1.message, /C/);
+  assert.match(s1.message, /Qui relève le défi \? https:\/\/x\.test\/$/);
+  assert.equal(gpStory(session, gp1, ps).message, gpStory(session, gp1, ps).message);
+  const s2 = gpStory(session, gp2, ps);
+  assert.match(s2.message, /Soirée après 2 GP : B prend la tête avec 37 pts, A à 3 pts derrière/);
+  const tie = gpStory({ playerIds: ['a', 'b'], grandPrix: [{ id: 't', bareme: B, races: [] }] }, { id: 't', bareme: B, races: [] }, ps.slice(0, 2));
+  assert.ok(tie.kicker);
+});

@@ -12,6 +12,7 @@ import {
 import { startGrandPrix, replaceRace } from './draw.js';
 import { raceGame, gameStyle, gamePill, racersFor, icon, rerollButton } from './race-visuals.js';
 import { NotFound } from './views.js';
+import { openShare, SHARE_ICON } from './share.js';
 
 export const gpUrl = (session, gp) => '#/session/' + session.id + '/gp/' + gp.id;
 
@@ -285,6 +286,10 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       rest.length ? h('ol', { class: 'recap-rest' }, rest.map((row) => h('li', {},
         h('span', { class: 'rank-pos' }, String(row.rank)), avatarEl(row.player, 22),
         h('span', { class: 'recap-rest-name' }, row.player.name), h('strong', {}, row.points + ' pts')))) : null,
+      h('button', { class: 'btn btn-outline btn-block share-btn', 'data-testid': 'button-share-gp',
+        onclick: (e) => { e.currentTarget.disabled = true; const b = e.currentTarget;
+          openShare({ session, gp, players }).finally(() => { b.disabled = false; }); } },
+        h('span', { class: 'gp-icon', 'aria-hidden': 'true', html: SHARE_ICON }), 'Partager le résultat'),
       facts.length ? h('div', { class: 'recap-facts' }, facts.map((f) => h('div', { class: 'recap-fact is-' + f.key },
         h('span', { class: 'recap-fact-title' }, f.title), h('span', { class: 'recap-fact-text' }, f.text)))) : null,
       h('div', { class: 'recap-session' },

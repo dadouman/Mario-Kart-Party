@@ -1,6 +1,6 @@
 // Une version télécharge un ensemble cohérent, sans réutiliser le cache HTTP.
 // Incrémenter VERSION à chaque publication de l'application.
-const VERSION = '2026.11.03.3';
+const VERSION = '2026.11.03.4';
 const CACHE = 'mkp-v7-' + VERSION;
 const ASSETS = [
   './',
@@ -15,6 +15,7 @@ const ASSETS = [
   'js/views-admin.js',
   'js/draw.js',
   'js/race-visuals.js',
+  'js/share.js',
   'js/updates.js',
   'manifest.webmanifest',
   'icon.svg',

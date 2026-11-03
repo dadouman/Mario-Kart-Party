@@ -862,3 +862,11 @@ details.accord > .accord-body { padding: 0 14px 14px; }
 }
 .gp-recap-box { scroll-margin-top: 124px; }
 @media (min-width: 720px) { .gp-recap-box { scroll-margin-top: 140px; } }
+
+/* ---------- Partage du résultat ---------- */
+.share-btn { gap: 8px; border-width: 2px; border-color: color-mix(in srgb, var(--gold) 60%, var(--border)); font-weight: 700; }
+.share-btn .gp-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.share-box { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; justify-items: center; }
+.share-preview { width: auto; max-width: 100%; max-height: 52vh; aspect-ratio: 9 / 16; border-radius: 16px; box-shadow: var(--shadow-sm); background: #1a1524; }
+.share-text { width: 100%; margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: .86rem; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.modal-actions:has([data-testid=button-copy-share]) { flex-wrap: wrap; }
