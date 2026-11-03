@@ -11,6 +11,28 @@ const H = 1920;
 const DISPLAY = 'Chillax, "General Sans", sans-serif';
 const BODY = '"General Sans", system-ui, sans-serif';
 
+// Icônes des faits marquants (traits, grille 24×24), communes à la carte et au récap.
+export const FACT_ICONS = {
+  wins: 'M3 18h18M4 18 3 7l5 4 4-7 4 7 5-4-1 11',
+  last: 'M9 3h6M12 3v3M8 6h8l2 3v8l-2 3H8l-2-3V9zM10 11h4M10 15h4',
+  comeback: 'M3 17l6-6 4 4 8-8M15 7h6v6',
+  tight: 'M9 2h6M12 2v3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v5l3 2',
+};
+export const FACT_COLORS = { wins: '#e9a800', last: '#e5402b', comeback: '#1d9a4d', tight: '#1597b0' };
+export const factIconSvg = (key) =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${FACT_ICONS[key] || FACT_ICONS.wins}"/></svg>`;
+
+function factBadge(ctx, key, cx, cy, size) {
+  ctx.save();
+  ctx.fillStyle = FACT_COLORS[key] || INK;
+  ctx.beginPath(); ctx.arc(cx, cy, size / 2, 0, Math.PI * 2); ctx.fill();
+  const k = (size * 0.62) / 24;
+  ctx.translate(cx - 12 * k, cy - 12 * k); ctx.scale(k, k);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D(FACT_ICONS[key] || FACT_ICONS.wins));
+  ctx.restore();
+}
+
 export const SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>';
 
 export function appUrl() {
@@ -97,7 +119,7 @@ export async function drawShareCard({ session, gp, players }) {
   const facts = gpHighlights(gp, players);
   const last = story.standings.at(-1);
   if (story.standings.length >= 3 && last.rank > 1 && story.standings.filter((r) => r.rank === last.rank).length === 1) {
-    facts.push({ key: 'last', title: 'Lanterne rouge', text: last.player.name + ' · ' + last.points + ' pts' });
+    facts.push({ key: 'last', title: 'Lanterne rouge', who: last.player.name, short: 'lanterne rouge · ' + last.points + ' pts', text: last.player.name + ' · ' + last.points + ' pts' });
   }
   const order = ['wins', 'last', 'comeback', 'tight'];
   facts.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
@@ -241,16 +263,19 @@ export async function drawShareCard({ session, gp, players }) {
     y += Math.ceil(races.length / cols) * courseRowH;
   }
 
-  // Notes de course, s'il reste de la place (une ligne chacune).
-  y += 46;
+  // Faits marquants : une icône par type, un nom en gras, un détail court.
+  y += 50;
   for (const f of facts) {
-    if (y + 10 > limit) break;
-    ctx.font = `500 30px ${BODY}`; ctx.textAlign = 'left';
-    ctx.fillStyle = f.key === 'last' ? RED : INK;
-    ctx.fillRect(L, y - 20, 14, 14);
-    ctx.fillStyle = INK;
-    ctx.fillText(ellipsis(ctx, f.title + ' : ' + f.text.replace(' · ', ', '), R - L - 36), L + 32, y - 4);
-    y += 46;
+    if (y + 12 > limit) break;
+    factBadge(ctx, f.key, L + 26, y - 12, 54);
+    ctx.textAlign = 'left'; ctx.fillStyle = INK;
+    ctx.font = `700 34px ${DISPLAY}`;
+    const who = ellipsis(ctx, f.who || f.text, 360);
+    ctx.fillText(who, L + 72, y);
+    const wx = L + 72 + ctx.measureText(who).width + 16;
+    ctx.font = `500 30px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.72)';
+    if (f.short) ctx.fillText(ellipsis(ctx, f.short, R - wx), wx, y);
+    y += 62;
   }
 
   // Talon : défi + code-barres.

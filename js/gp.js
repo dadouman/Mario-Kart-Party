@@ -12,7 +12,7 @@ import {
 import { startGrandPrix, replaceRace, renameGp } from './draw.js';
 import { raceGame, gameStyle, gamePill, racersFor, icon, rerollButton } from './race-visuals.js';
 import { NotFound } from './views.js';
-import { openShare, SHARE_ICON } from './share.js';
+import { openShare, SHARE_ICON, factIconSvg } from './share.js';
 
 export const gpUrl = (session, gp) => '#/session/' + session.id + '/gp/' + gp.id;
 
@@ -299,7 +299,9 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
           openShare({ session, gp, players }).finally(() => { b.disabled = false; }); } },
         h('span', { class: 'gp-icon', 'aria-hidden': 'true', html: SHARE_ICON }), 'Partager le résultat'),
       facts.length ? h('div', { class: 'recap-facts' }, facts.map((f) => h('div', { class: 'recap-fact is-' + f.key },
-        h('span', { class: 'recap-fact-title' }, f.title), h('span', { class: 'recap-fact-text' }, f.text)))) : null,
+        h('span', { class: 'recap-fact-icon', html: factIconSvg(f.key) }),
+        h('span', { class: 'recap-fact-title' }, f.title),
+        h('span', { class: 'recap-fact-text' }, h('strong', {}, f.who || f.text), f.short ? ' ' + f.short : '')))) : null,
       h('div', { class: 'recap-session' },
         h('h3', {}, 'Classement de la soirée'),
         h('ol', { class: showDelta ? 'has-trend' : '' }, delta.map((row) => {

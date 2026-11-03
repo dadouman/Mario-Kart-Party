@@ -882,3 +882,13 @@ details.accord > .accord-body { padding: 0 14px 14px; }
 .gp-line-num { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: var(--chip-bg); font-family: var(--font-display); font-weight: 700; font-size: .8rem; }
 .gp-line-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gp-line .content-name { grid-column: 2; grid-row: 2; margin-top: -6px; }
+
+/* ---------- Icônes des faits marquants ---------- */
+.recap-fact { grid-template-columns: 36px minmax(0, 1fr); column-gap: 12px; align-items: center; border-left: 0; }
+.recap-fact-icon { grid-row: span 2; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--fact, var(--gold)); color: #fff; }
+.recap-fact-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.recap-fact.is-wins { --fact: #e9a800; }
+.recap-fact.is-comeback { --fact: #1d9a4d; }
+.recap-fact.is-tight { --fact: #1597b0; }
+.recap-fact-text { font-weight: 500; color: var(--text-muted); }
+.recap-fact-text strong { color: var(--text); font-weight: 700; }
