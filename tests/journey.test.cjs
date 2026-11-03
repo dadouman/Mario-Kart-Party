@@ -15,7 +15,7 @@ function route(hash) {
     render: view => { result = view; },
   };
   for (const name of ['HomeView', 'NewSessionView', 'SessionView', 'GpView',
-    'RaceView', 'NotFound', 'TirageView', 'JeuxView', 'GameView',
+    'RaceView', 'NotFound', 'TirageView', 'GameView',
     'ClassementView', 'ReglagesView']) {
     sandbox[name] = (...args) => ({ name, args: JSON.parse(JSON.stringify(args)) });
   }
@@ -23,10 +23,14 @@ function route(hash) {
   return result;
 }
 
-test('GP preparation reuses draw page with the exact session context', () => {
+test('old GP preparation links open the evening; express draw stays reachable', () => {
   assert.deepEqual(route('#/session/session-2/nouveau-gp'),
-    { name: 'TirageView', args: ['session-2'] });
+    { name: 'SessionView', args: ['session-2'] });
   assert.deepEqual(route('#/tirage'), { name: 'TirageView', args: [] });
+});
+
+test('the game library now lives in settings', () => {
+  assert.deepEqual(route('#/jeux'), { name: 'ReglagesView', args: [] });
 });
 
 test('catalog import has a dedicated address without changing game detail', () => {

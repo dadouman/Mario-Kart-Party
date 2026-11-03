@@ -4,74 +4,68 @@
 // ============================================================
 
 // ---------- Tirage ----------
-// items : objets avec { id, name } ; options : { count, unique, excludeIds, lockedIds }
 
-export function eligibleItems(allItems, { activeOnly = true, excludeIds = [], statuses }) {
-  return allItems.filter((it) => {
-    if (activeOnly && it.active === false) return false;
-    if (it.status === 'archived') return false;
-    if (excludeIds.includes(it.id)) return false;
-    if (statuses && statuses.length && !statuses.includes(it.status)) return false;
-    return true;
-  });
+// Contenus tirables : actifs et non archivés.
+export function eligibleItems(allItems, { excludeIds = [] } = {}) {
+  const excluded = new Set(excludeIds);
+  return allItems.filter((it) => it.active !== false && !it.archived &&
+    it.status !== 'archived' && !excluded.has(it.id));
 }
 
-export function drawItems(items, { count, unique = true, lockedIds = [], rng = Math.random }) {
-  // lockedIds : contenus verrouillés conservés tels quels.
-  const locked = items.filter((it) => lockedIds.includes(it.id));
-  const pool = items.filter((it) => !lockedIds.includes(it.id));
+// Nombre de courses pendant lesquelles un circuit joué reste moins probable.
+export const RECENT_WINDOW = 24;
 
-  const need = count - locked.length;
+// Ancienneté de chaque circuit : 0 = joué dans la toute dernière course.
+export function recencyMap(sessions) {
+  const races = sessions
+    .flatMap((s) => s.grandPrix || [])
+    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+    .flatMap((gp) => gp.races || []);
+  const age = new Map();
+  races.forEach((race, index) => {
+    if (race.contentId) age.set(race.contentId, races.length - 1 - index);
+  });
+  return age;
+}
+
+// Poids d'un circuit : 1 s'il n'a pas été joué récemment, très faible juste après.
+export function drawWeight(id, recency, window = RECENT_WINDOW) {
+  if (!recency || !recency.has(id)) return 1;
+  const age = recency.get(id);
+  if (age >= window) return 1;
+  return 0.05 + 0.95 * (age / window);
+}
+
+// Tirage pondéré sans doublon (Efraimidis-Spirakis) : jamais deux fois le même
+// circuit, les circuits récents sont moins probables mais restent possibles.
+export function drawItems(items, { count, lockedIds = [], recency = null, rng = Math.random }) {
+  const locked = new Set(lockedIds);
+  const keep = items.filter((it) => locked.has(it.id));
+  const seen = new Set(keep.map((it) => it.id));
+  const pool = [];
+  for (const it of items) {
+    if (seen.has(it.id)) continue;
+    seen.add(it.id);
+    pool.push(it);
+  }
+  const need = count - keep.length;
   if (need < 0) return { error: 'locked_overflow', items: null };
-
-  if (need === 0) return { items: [...locked] };
-  if (!pool.length) return { error: 'insufficient', available: 0, items: null };
-
-  let candidates = pool;
-  if (unique) {
-    // Un tirage sans doublon ne peut pas dépasser le stock d'identifiants distincts.
-    const uniqueIds = new Set(candidates.map((c) => c.id));
-    if (uniqueIds.size < need) {
-      return {
-        error: 'insufficient',
-        available: uniqueIds.size,
-        items: null,
-      };
-    }
-    // Tirage sans remise (Fisher-Yates partiel), sans biais d'ordre initial.
-    candidates = [...candidates];
-    const picked = [];
-    for (let i = 0; i < need; i++) {
-      const j = i + Math.floor(rng() * (candidates.length - i));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-      picked.push(candidates[i]);
-    }
-    return { items: [...locked, ...picked] };
-  }
-
-  const picked = [];
-  for (let i = 0; i < need; i++) {
-    picked.push(pool[Math.floor(rng() * pool.length)]);
-  }
-  return { items: [...locked, ...picked] };
+  if (pool.length < need) return { error: 'insufficient', available: pool.length + keep.length, items: null };
+  const picked = pool
+    .map((it) => ({ it, key: Math.pow(rng() || Number.MIN_VALUE, 1 / drawWeight(it.id, recency)) }))
+    .sort((a, b) => b.key - a.key)
+    .slice(0, need)
+    .map((x) => x.it);
+  return { items: [...keep, ...picked] };
 }
 
 // ---------- Score ----------
 // Barème : tableau de points indexé par position (index 0 = 1re place).
-// Statuts : 'finished' (position), 'abandon', 'absent', 'forfait', 'disqualified'.
-
-export const RACE_STATUSES = [
-  { key: 'abandon', label: 'Abandon', pts: 0 },
-  { key: 'absent', label: 'Absent', pts: 0 },
-  { key: 'forfeit', label: 'Forfait', pts: 0 },
-];
+// Les anciens statuts (abandon, absent, forfait) valent 0 point.
 
 export function pointsFor(result, bareme) {
   if (!result) return null;
-  if (result.status) {
-    const st = RACE_STATUSES.find((s) => s.key === result.status);
-    return st ? st.pts : 0;
-  }
+  if (result.status) return 0;
   if (typeof result.pos !== 'number') return null;
   const i = result.pos - 1;
   if (i < 0 || i >= bareme.length) return 0;
@@ -105,8 +99,12 @@ export function gpConflicts(gp) {
   return clashes;
 }
 
+export function gpFinished(gp, expectedCount) {
+  return gp.races.length > 0 && gpComplete(gp, expectedCount) && gpConflicts(gp).length === 0;
+}
+
+// Points par joueur, calculés en direct à partir des courses saisies.
 export function gpPoints(gp) {
-  // Points totaux par joueur pour ce GP (validé ou provisoire).
   const totals = {};
   for (const race of gp.races) {
     for (const [pid, res] of Object.entries(race.results || {})) {
@@ -117,54 +115,56 @@ export function gpPoints(gp) {
   return totals;
 }
 
+// Rang « compétition » : les ex æquo partagent le même rang (1, 1, 3…).
+function withRanks(rows, key) {
+  rows.forEach((row, index) => {
+    row.rank = index && row[key] === rows[index - 1][key] ? rows[index - 1].rank : index + 1;
+  });
+  return rows;
+}
+
 export function gpStandings(gp, players) {
   const totals = gpPoints(gp);
   const rows = players.map((player, index) => ({
     player, points: totals[player.id] || 0, order: index,
   })).sort((a, b) => b.points - a.points || a.order - b.order);
-  rows.forEach((row, index) => {
-    row.rank = index && row.points === rows[index - 1].points ? rows[index - 1].rank : index + 1;
-  });
-  return rows;
+  return withRanks(rows, 'points');
 }
 
 export function sessionRanking(session) {
   const totals = {};
   for (const pid of session.playerIds) totals[pid] = 0;
   for (const gp of session.grandPrix) {
-    if (!gp.validated) continue;
-    for (const [pid, pts] of Object.entries(gp.points)) {
+    for (const [pid, pts] of Object.entries(gpPoints(gp))) {
       totals[pid] = (totals[pid] || 0) + pts;
     }
   }
   const rows = Object.entries(totals)
-    .map(([pid, pts]) => ({ pid, pts }))
-    .sort((a, b) => b.pts - a.pts);
-  return rows;
+    .map(([pid, pts], order) => ({ pid, pts, order }))
+    .sort((a, b) => b.pts - a.pts || a.order - b.order);
+  return withRanks(rows, 'pts');
 }
 
 export function allTimeStats(sessions, players) {
-  // Par joueur : points, victoires (1re place en course), podiums, GPs joués.
+  // Par joueur : points, victoires (1re place en course), podiums, GP joués.
   const stats = {};
-  for (const p of players) {
-    stats[p.id] = { pid: p.id, pts: 0, wins: 0, podiums: 0, gps: 0 };
-  }
+  const entry = (pid) => (stats[pid] ||= { pid, pts: 0, wins: 0, podiums: 0, gps: 0 });
+  for (const p of players) entry(p.id);
   for (const s of sessions) {
     for (const gp of s.grandPrix) {
-      if (!gp.validated) continue;
+      const played = new Set();
       for (const race of gp.races) {
         for (const [pid, res] of Object.entries(race.results || {})) {
-          if (!stats[pid]) stats[pid] = { pid, pts: 0, wins: 0, podiums: 0, gps: 0 };
-          if (res && res.pos === 1) stats[pid].wins++;
-          if (res && typeof res.pos === 'number' && res.pos <= 3) stats[pid].podiums++;
+          if (!res) continue;
+          played.add(pid);
+          if (res.pos === 1) entry(pid).wins++;
+          if (typeof res.pos === 'number' && res.pos <= 3) entry(pid).podiums++;
         }
       }
-      for (const [pid, pts] of Object.entries(gp.points)) {
-        if (!stats[pid]) stats[pid] = { pid, pts: 0, wins: 0, podiums: 0, gps: 0 };
-        stats[pid].pts += pts;
-        stats[pid].gps += 1;
-      }
+      for (const [pid, pts] of Object.entries(gpPoints(gp))) entry(pid).pts += pts;
+      for (const pid of played) entry(pid).gps++;
     }
   }
-  return Object.values(stats).sort((a, b) => b.pts - a.pts);
+  const rows = Object.values(stats).sort((a, b) => b.pts - a.pts);
+  return withRanks(rows, 'pts');
 }
