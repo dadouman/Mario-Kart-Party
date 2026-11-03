@@ -4,7 +4,7 @@
 // ============================================================
 
 import { h, modal, toast } from './ui.js';
-import { gpStory, gpHighlights } from './engine.js';
+import { gpStory, gpHighlights, raceWinners } from './engine.js';
 
 const W = 1080;
 const H = 1920;
@@ -54,17 +54,6 @@ const PAPER = '#f4ecdc';
 const RED = '#e5402b';
 const YELLOW = '#f5c23e';
 
-function wrap(ctx, text, maxWidth) {
-  const words = text.split(' ');
-  const lines = [];
-  let line = '';
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; } else line = test;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
 
 // Tampon encreur, légèrement penché et irrégulier.
 function stamp(ctx, text, cx, cy, rnd) {
@@ -154,7 +143,7 @@ export async function drawShareCard({ session, gp, players }) {
   ctx.fillText('Vainqueur', L, Y0 + 175);
   const leaders = story.standings.filter((r) => r.rank === 1);
   const winnerText = leaders.map((r) => r.player.name).join(' & ') || '—';
-  fitFont(ctx, winnerText, 700, 150, DISPLAY, R - L - 150);
+  fitFont(ctx, winnerText, 700, 150, DISPLAY, R - L - 240);
   ctx.fillStyle = RED; ctx.fillText(winnerText, L + 7, Y0 + 318 + 7);
   ctx.fillStyle = INK; ctx.fillText(winnerText, L, Y0 + 318);
   const first = story.standings[0];
@@ -165,57 +154,103 @@ export async function drawShareCard({ session, gp, players }) {
   let y = Y0 + 450;
   perforation(ctx, X0, X1, y);
 
+  // Mise en page adaptative : le top 6 reste lisible, les courses se tassent.
+  const footerY = Y1 - 230;
+  const limit = footerY - 34;
+  const races = gp.races.filter((r) => Object.keys(r.results || {}).length);
+  const total = story.standings.length;
+  const shown = story.standings.slice(0, total <= 7 ? 7 : 6);
+  const more = total - shown.length;
+  const cols = races.length <= 8 ? 2 : races.length <= 15 ? 3 : 4;
+  const courseRowH = cols === 2 ? 50 : cols === 3 ? 44 : 40;
+  const coursesH = races.length ? 58 + Math.ceil(races.length / cols) * courseRowH : 0;
+  const tableH = (big, row) => 30 + big + (shown.length - 1) * (row + 6) + 6 + (more ? 46 : 0);
+  let bigH = 120, rowH = 88;
+  const startY = y + 60;
+  if (startY + tableH(bigH, rowH) + 20 + coursesH > limit) { bigH = 100; rowH = 72; }
+  if (startY + tableH(bigH, rowH) + 20 + coursesH > limit) { bigH = 88; rowH = 62; }
+  const rowFont = rowH >= 88 ? 44 : rowH >= 72 ? 38 : 34;
+
   // Classement façon tableau de chronométrage.
-  y += 60;
+  y = startY;
   ctx.font = `700 24px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)'; ctx.textAlign = 'left';
   ctx.fillText('POS.', L, y); ctx.fillText('PILOTE', L + 130, y);
   ctx.textAlign = 'right'; ctx.fillText('PTS', R, y); ctx.fillText('ÉCART', R - 150, y);
   y += 24;
-  const shown = story.standings.slice(0, 6);
   shown.forEach((row, i) => {
     const big = i === 0;
-    const hgt = big ? 120 : 88;
+    const hgt = big ? bigH : rowH;
     if (big) { ctx.fillStyle = YELLOW; ctx.fillRect(L - 20, y, R - L + 40, hgt); }
     else if (i % 2 === 0) { ctx.fillStyle = 'rgba(29,27,46,.06)'; ctx.fillRect(L - 20, y, R - L + 40, hgt); }
     const mid = y + hgt / 2;
-    ctx.fillStyle = INK; ctx.fillRect(L, y + 12, 92, hgt - 24);
+    ctx.fillStyle = INK; ctx.fillRect(L, y + 10, 92, hgt - 20);
     ctx.fillStyle = big ? YELLOW : PAPER; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `700 ${big ? 60 : 44}px ${DISPLAY}`;
+    ctx.font = `700 ${big ? Math.round(bigH / 2) : rowFont}px ${DISPLAY}`;
     ctx.fillText(String(row.rank), L + 46, mid + 3);
-    ctx.fillStyle = row.player.color || RED; ctx.fillRect(L + 112, y + 16, 10, hgt - 32);
+    ctx.fillStyle = row.player.color || RED; ctx.fillRect(L + 112, y + 14, 10, hgt - 28);
     ctx.fillStyle = INK; ctx.textAlign = 'left';
-    ctx.font = `700 ${big ? 58 : 44}px ${DISPLAY}`;
+    ctx.font = `700 ${big ? Math.round(bigH * 0.48) : rowFont}px ${DISPLAY}`;
     ctx.fillText(ellipsis(ctx, row.player.name, 420), L + 142, mid + 3);
     ctx.textAlign = 'right';
     ctx.fillText(String(row.points), R, mid + 3);
-    ctx.font = `600 30px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.65)';
+    ctx.font = `600 ${rowH >= 72 ? 30 : 26}px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.65)';
     ctx.fillText(i === 0 ? '—' : '+' + (first.points - row.points), R - 150, mid + 3);
     ctx.textBaseline = 'alphabetic';
     y += hgt + 6;
   });
-  if (story.standings.length > shown.length) {
-    ctx.textAlign = 'left'; ctx.font = `500 30px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)';
-    ctx.fillText('+ ' + (story.standings.length - shown.length) + ' autres pilotes', L + 142, y + 40);
-    y += 60;
+  if (more) {
+    ctx.textAlign = 'left'; ctx.font = `500 28px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)';
+    ctx.fillText(ellipsis(ctx, '+ ' + story.standings.slice(shown.length).map((r) => r.rank + '. ' + r.player.name + ' ' + r.points).join(' · '),
+      R - L - 142), L + 142, y + 32);
+    y += 46;
   }
 
-  // Notes de course, comme tapées à la machine.
-  const footerY = Y1 - 230;
-  y += 70;
-  ctx.textAlign = 'left'; ctx.font = `700 24px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)';
-  if (facts.length && y + 80 < footerY - 40) ctx.fillText('NOTES DE COURSE', L, y);
-  y += 22;
+  // Courses jouées : grille très compacte, numéro, circuit, vainqueur.
+  if (races.length) {
+    y += 44;
+    ctx.textAlign = 'left'; ctx.font = `700 24px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)';
+    ctx.fillText(races.length + ' COURSES', L, y);
+    ctx.textAlign = 'right'; ctx.fillText('VAINQUEUR', R, y);
+    y += 14;
+    const gap = cols === 4 ? 14 : 24;
+    const cw = (R - L - gap * (cols - 1)) / cols;
+    const byId = Object.fromEntries(players.map((p) => [p.id, p]));
+    races.forEach((race, i) => {
+      const c = i % cols, r = Math.floor(i / cols);
+      const cx = L + c * (cw + gap), cy = y + r * courseRowH;
+      const midY = cy + courseRowH / 2;
+      const box = courseRowH - 14;
+      ctx.fillStyle = INK; ctx.fillRect(cx, midY - box / 2, box, box);
+      ctx.fillStyle = PAPER; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `700 ${Math.round(box * 0.55)}px ${DISPLAY}`;
+      ctx.fillText(String(race.num ?? i + 1), cx + box / 2, midY + 1);
+      const winner = byId[raceWinners(race)[0]];
+      const chipW = cols === 2 ? 52 : 40;
+      if (winner) {
+        ctx.fillStyle = winner.color || RED;
+        roundRect(ctx, cx + cw - chipW, midY - box / 2, chipW, box, 6); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(box * 0.46)}px ${DISPLAY}`;
+        ctx.fillText(winner.name.trim().slice(0, 2).toUpperCase(), cx + cw - chipW / 2, midY + 1);
+      }
+      ctx.fillStyle = INK; ctx.textAlign = 'left';
+      ctx.font = `600 ${cols === 2 ? 26 : cols === 3 ? 22 : 19}px ${BODY}`;
+      ctx.fillText(ellipsis(ctx, race.contentName || 'Course ' + (i + 1), cw - box - chipW - 26), cx + box + 12, midY + 1);
+      ctx.textBaseline = 'alphabetic';
+      if (r > 0 && c === 0) { ctx.fillStyle = 'rgba(29,27,46,.12)'; ctx.fillRect(L, cy, R - L, 2); }
+    });
+    y += Math.ceil(races.length / cols) * courseRowH;
+  }
+
+  // Notes de course, s'il reste de la place (une ligne chacune).
+  y += 46;
   for (const f of facts) {
-    ctx.font = `500 34px ${BODY}`;
-    const text = f.title + ' : ' + f.text.replace(' · ', ', ');
-    const lines = wrap(ctx, text, R - L - 50).slice(0, 2);
-    if (y + 20 + lines.length * 46 > footerY - 40) break;
-    y += 20;
+    if (y + 10 > limit) break;
+    ctx.font = `500 30px ${BODY}`; ctx.textAlign = 'left';
     ctx.fillStyle = f.key === 'last' ? RED : INK;
-    ctx.fillRect(L, y + 14, 16, 16);
+    ctx.fillRect(L, y - 20, 14, 14);
     ctx.fillStyle = INK;
-    lines.forEach((ln, k) => ctx.fillText(ln, L + 40, y + 34 + k * 46));
-    y += lines.length * 46;
+    ctx.fillText(ellipsis(ctx, f.title + ' : ' + f.text.replace(' · ', ', '), R - L - 36), L + 32, y - 4);
+    y += 46;
   }
 
   // Talon : défi + code-barres.
