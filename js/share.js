@@ -8,7 +8,6 @@ import { gpStory, gpHighlights } from './engine.js';
 
 const W = 1080;
 const H = 1920;
-const TIERS = { 1: ['#ffd34d', '#c98f00'], 2: ['#cfd6e0', '#7d8796'], 3: ['#e8a06a', '#9c5428'] };
 const DISPLAY = 'Chillax, "General Sans", sans-serif';
 const BODY = '"General Sans", system-ui, sans-serif';
 
@@ -42,30 +41,70 @@ function roundRect(ctx, x, y, w, hgt, r) {
   ctx.roundRect ? ctx.roundRect(x, y, w, hgt, r) : ctx.rect(x, y, w, hgt);
 }
 
-function checker(ctx, y, size = 30) {
-  for (let x = 0; x < W; x += size) {
-    for (let row = 0; row < 2; row++) {
-      ctx.fillStyle = ((x / size + row) % 2) ? '#f6f1e7' : '#16131d';
-      ctx.fillRect(x, y + row * size, size, size);
-    }
-  }
+
+
+// Petit générateur pseudo-aléatoire : la carte d'un GP reste identique.
+function seeded(seed) {
+  let x = [...String(seed)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 2166136261) || 1;
+  return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return ((x >>> 0) % 10000) / 10000; };
 }
 
-function avatar(ctx, player, cx, cy, r, ring) {
+const INK = '#1d1b2e';
+const PAPER = '#f4ecdc';
+const RED = '#e5402b';
+const YELLOW = '#f5c23e';
+
+function wrap(ctx, text, maxWidth) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = w; } else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+// Tampon encreur, légèrement penché et irrégulier.
+function stamp(ctx, text, cx, cy, rnd) {
   ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, r + 14, 0, Math.PI * 2); ctx.fillStyle = ring; ctx.fill();
-  ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.fillStyle = '#1b1724'; ctx.fill();
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = player.color || '#ff5a49'; ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `700 ${Math.round(r * 0.8)}px ${DISPLAY}`;
-  ctx.fillText(player.name.trim().slice(0, 2).toUpperCase(), cx, cy + 2);
+  ctx.translate(cx, cy);
+  ctx.rotate(0.21);
+  ctx.globalAlpha = 0.88;
+  ctx.strokeStyle = RED; ctx.fillStyle = RED;
+  ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(0, 0, 118, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 100, 0, Math.PI * 2); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `700 22px ${BODY}`;
+  ctx.fillText('OFFICIEL', 0, -48);
+  fitFont(ctx, text.toUpperCase(), 700, 40, DISPLAY, 160);
+  ctx.fillText(text.toUpperCase(), 0, 4);
+  ctx.font = `600 22px ${BODY}`;
+  ctx.fillText('★  ★  ★', 0, 52);
+  // Manques d'encre : quelques taches couleur papier.
+  ctx.globalAlpha = 1; ctx.fillStyle = PAPER;
+  for (let i = 0; i < 40; i++) {
+    const a = rnd() * Math.PI * 2, d = rnd() * 125;
+    ctx.beginPath(); ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 1 + rnd() * 3.5, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.restore();
 }
 
-// Dessine la carte et renvoie le canvas.
+function perforation(ctx, x0, x1, y) {
+  ctx.fillStyle = RED;
+  ctx.beginPath(); ctx.arc(x0, y, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x1, y, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(29,27,46,.35)'; ctx.lineWidth = 3; ctx.setLineDash([14, 12]);
+  ctx.beginPath(); ctx.moveTo(x0 + 44, y); ctx.lineTo(x1 - 44, y); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// Dessine la carte et renvoie le canvas : un ticket de course imprimé.
 export async function drawShareCard({ session, gp, players }) {
   await fontsReady();
   const story = gpStory(session, gp, players);
+  const rnd = seeded(gp.id || story.gpNumber);
   const facts = gpHighlights(gp, players);
   const last = story.standings.at(-1);
   if (story.standings.length >= 3 && last.rank > 1 && story.standings.filter((r) => r.rank === last.rank).length === 1) {
@@ -73,123 +112,124 @@ export async function drawShareCard({ session, gp, players }) {
   }
   const order = ['wins', 'last', 'comeback', 'tight'];
   facts.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  // Fond : nuit violette, halo doré derrière le podium, rayons discrets.
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#2a1230'); bg.addColorStop(0.45, '#1a1524'); bg.addColorStop(1, '#100e16');
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  // Fond rouge à rayures diagonales, à plat.
+  ctx.fillStyle = RED; ctx.fillRect(0, 0, W, H);
   ctx.save();
-  ctx.translate(W / 2, 860);
-  for (let i = 0; i < 18; i++) {
-    ctx.rotate((Math.PI * 2) / 18);
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-60, -1100); ctx.lineTo(60, -1100); ctx.closePath();
-    ctx.fillStyle = 'rgba(255, 197, 61, 0.035)'; ctx.fill();
+  ctx.strokeStyle = '#d23722'; ctx.lineWidth = 34;
+  for (let x = -H; x < W + H; x += 96) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + H, H); ctx.stroke(); }
+  ctx.restore();
+
+  // Le ticket, posé de travers, avec une ombre franche.
+  const X0 = 70, X1 = 1010, Y0 = 140, Y1 = 1780, TW = X1 - X0;
+  ctx.save();
+  ctx.translate(W / 2, H / 2); ctx.rotate(-0.026); ctx.translate(-W / 2, -H / 2);
+  ctx.fillStyle = INK; roundRect(ctx, X0 + 16, Y0 + 18, TW, Y1 - Y0, 18); ctx.fill();
+  ctx.fillStyle = PAPER; roundRect(ctx, X0, Y0, TW, Y1 - Y0, 18); ctx.fill();
+  ctx.save(); roundRect(ctx, X0, Y0, TW, Y1 - Y0, 18); ctx.clip();
+  for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = rnd() > 0.5 ? 'rgba(29,27,46,.05)' : 'rgba(255,255,255,.35)';
+    ctx.fillRect(X0 + rnd() * TW, Y0 + rnd() * (Y1 - Y0), 2, 2);
   }
   ctx.restore();
-  const glow = ctx.createRadialGradient(W / 2, 900, 40, W / 2, 900, 620);
-  glow.addColorStop(0, 'rgba(255, 197, 61, 0.30)'); glow.addColorStop(1, 'rgba(255, 197, 61, 0)');
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-  checker(ctx, 0); checker(ctx, H - 60);
 
-  // En-tête.
-  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = 'rgba(255,255,255,.62)';
-  ctx.font = `600 34px ${BODY}`;
-  ctx.fillText(ellipsis(ctx, ('Grand Prix ' + story.gpNumber + '  ·  ' + session.name).toUpperCase(), 900), W / 2, 210);
+  const L = X0 + 60, R = X1 - 60;
+  ctx.textBaseline = 'alphabetic';
 
-  ctx.font = `700 40px ${DISPLAY}`;
-  const kw = ctx.measureText(story.kicker.toUpperCase()).width + 70;
-  ctx.fillStyle = '#ff5a49';
-  roundRect(ctx, (W - kw) / 2, 248, kw, 70, 35); ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.fillText(story.kicker.toUpperCase(), W / 2, 297);
+  // En-tête du ticket.
+  ctx.fillStyle = INK; ctx.font = `700 30px ${BODY}`; ctx.textAlign = 'left';
+  ctx.fillText('GRAND PRIX N°' + String(story.gpNumber).padStart(2, '0'), L, Y0 + 80);
+  ctx.textAlign = 'right'; ctx.font = `500 28px ${BODY}`;
+  ctx.fillText(ellipsis(ctx, session.name, 420), R, Y0 + 80);
+  ctx.fillRect(L, Y0 + 104, R - L, 5);
 
+  ctx.textAlign = 'left';
+  ctx.font = `600 30px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.7)';
+  ctx.fillText('Vainqueur', L, Y0 + 175);
   const leaders = story.standings.filter((r) => r.rank === 1);
   const winnerText = leaders.map((r) => r.player.name).join(' & ') || '—';
-  fitFont(ctx, winnerText, 700, 140, DISPLAY, 960);
-  ctx.fillStyle = '#ffd34d';
-  ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowOffsetY = 6; ctx.shadowBlur = 0;
-  ctx.fillText(winnerText, W / 2, 465);
-  ctx.shadowColor = 'transparent';
-  ctx.fillStyle = 'rgba(255,255,255,.85)';
-  ctx.font = `500 42px ${BODY}`;
+  fitFont(ctx, winnerText, 700, 150, DISPLAY, R - L - 150);
+  ctx.fillStyle = RED; ctx.fillText(winnerText, L + 7, Y0 + 318 + 7);
+  ctx.fillStyle = INK; ctx.fillText(winnerText, L, Y0 + 318);
   const first = story.standings[0];
-  ctx.fillText(leaders.length > 1 ? 'à égalité, ' + first.points + ' pts chacun' : 'remporte le GP avec ' + (first?.points ?? 0) + ' pts', W / 2, 535);
+  ctx.font = `500 36px ${BODY}`; ctx.fillStyle = INK;
+  ctx.fillText(leaders.length > 1 ? 'à égalité, ' + first.points + ' pts chacun' : first ? first.points + ' pts au compteur' : '', L, Y0 + 380);
+  stamp(ctx, story.kicker, R - 90, Y0 + 245, rnd);
 
-  // Podium.
-  const base = 1220;
-  const cols = [
-    { idx: 1, x: 250, hgt: 210, r: 62 },
-    { idx: 0, x: 540, hgt: 300, r: 80 },
-    { idx: 2, x: 830, hgt: 150, r: 56 },
-  ];
-  for (const c of cols) {
-    const row = story.standings[c.idx];
-    if (!row) continue;
-    const tier = TIERS[Math.min(row.rank, 3)];
-    const top = base - c.hgt;
-    const g = ctx.createLinearGradient(0, top, 0, base);
-    g.addColorStop(0, tier[0]); g.addColorStop(1, tier[1]);
-    ctx.fillStyle = g;
-    roundRect(ctx, c.x - 130, top, 260, c.hgt, [22, 22, 0, 0]); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(c.x - 118, top + 6, 236, 6);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
-    ctx.font = `700 ${c.idx === 0 ? 120 : 96}px ${DISPLAY}`;
-    ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowOffsetY = 5;
-    ctx.fillText(String(row.rank), c.x, top + (c.idx === 0 ? 130 : 108));
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = `600 34px ${BODY}`;
-    ctx.fillText(row.points + ' pts', c.x, top - 22);
-    ctx.fillStyle = '#fff'; ctx.font = `700 46px ${DISPLAY}`;
-    ctx.fillText(ellipsis(ctx, row.player.name, 270), c.x, top - 70);
-    avatar(ctx, row.player, c.x, top - 120 - c.r - 14, c.r, tier[0]);
-  }
-  ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(90, base, W - 180, 6);
+  let y = Y0 + 450;
+  perforation(ctx, X0, X1, y);
 
-  // Suite du classement.
-  let y = base + 70;
-  const rest = story.standings.slice(3);
-  rest.slice(0, 3).forEach((row) => {
-    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `700 36px ${DISPLAY}`;
-    ctx.fillText(String(row.rank), 150, y);
-    ctx.fillStyle = '#fff'; ctx.font = `600 38px ${BODY}`;
-    ctx.fillText(ellipsis(ctx, row.player.name, 560), 220, y);
-    ctx.textAlign = 'right'; ctx.font = `700 36px ${DISPLAY}`;
-    ctx.fillText(row.points + ' pts', W - 150, y);
-    y += 58;
+  // Classement façon tableau de chronométrage.
+  y += 60;
+  ctx.font = `700 24px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)'; ctx.textAlign = 'left';
+  ctx.fillText('POS.', L, y); ctx.fillText('PILOTE', L + 130, y);
+  ctx.textAlign = 'right'; ctx.fillText('PTS', R, y); ctx.fillText('ÉCART', R - 150, y);
+  y += 24;
+  const shown = story.standings.slice(0, 6);
+  shown.forEach((row, i) => {
+    const big = i === 0;
+    const hgt = big ? 120 : 88;
+    if (big) { ctx.fillStyle = YELLOW; ctx.fillRect(L - 20, y, R - L + 40, hgt); }
+    else if (i % 2 === 0) { ctx.fillStyle = 'rgba(29,27,46,.06)'; ctx.fillRect(L - 20, y, R - L + 40, hgt); }
+    const mid = y + hgt / 2;
+    ctx.fillStyle = INK; ctx.fillRect(L, y + 12, 92, hgt - 24);
+    ctx.fillStyle = big ? YELLOW : PAPER; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${big ? 60 : 44}px ${DISPLAY}`;
+    ctx.fillText(String(row.rank), L + 46, mid + 3);
+    ctx.fillStyle = row.player.color || RED; ctx.fillRect(L + 112, y + 16, 10, hgt - 32);
+    ctx.fillStyle = INK; ctx.textAlign = 'left';
+    ctx.font = `700 ${big ? 58 : 44}px ${DISPLAY}`;
+    ctx.fillText(ellipsis(ctx, row.player.name, 420), L + 142, mid + 3);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(row.points), R, mid + 3);
+    ctx.font = `600 30px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.65)';
+    ctx.fillText(i === 0 ? '—' : '+' + (first.points - row.points), R - 150, mid + 3);
+    ctx.textBaseline = 'alphabetic';
+    y += hgt + 6;
   });
-  if (rest.length > 3) {
-    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = `500 32px ${BODY}`;
-    ctx.fillText('+ ' + (rest.length - 3) + ' autre' + (rest.length > 4 ? 's' : ''), W / 2, y);
-    y += 50;
+  if (story.standings.length > shown.length) {
+    ctx.textAlign = 'left'; ctx.font = `500 30px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)';
+    ctx.fillText('+ ' + (story.standings.length - shown.length) + ' autres pilotes', L + 142, y + 40);
+    y += 60;
   }
 
-  // Faits marquants, tant qu'il reste de la place au-dessus du pied de carte.
-  y = Math.max(y, base + 50) - 6;
-  const colors = { wins: '#ffc53d', comeback: '#3ecf6f', tight: '#23b8d1', last: '#ff5a49' };
+  // Notes de course, comme tapées à la machine.
+  const footerY = Y1 - 230;
+  y += 70;
+  ctx.textAlign = 'left'; ctx.font = `700 24px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.6)';
+  if (facts.length && y + 80 < footerY - 40) ctx.fillText('NOTES DE COURSE', L, y);
+  y += 22;
   for (const f of facts) {
-    if (y + 108 > 1755) break;
-    ctx.fillStyle = 'rgba(255,255,255,.07)';
-    roundRect(ctx, 90, y, W - 180, 108, 22); ctx.fill();
-    ctx.fillStyle = colors[f.key] || '#ffc53d';
-    roundRect(ctx, 90, y, 12, 108, [22, 0, 0, 22]); ctx.fill();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = colors[f.key] || '#ffc53d'; ctx.font = `700 26px ${BODY}`;
-    ctx.fillText(f.title.toUpperCase(), 135, y + 42);
-    ctx.fillStyle = '#fff'; ctx.font = `600 36px ${BODY}`;
-    ctx.fillText(ellipsis(ctx, f.text, W - 290), 135, y + 86);
-    y += 122;
+    ctx.font = `500 34px ${BODY}`;
+    const text = f.title + ' : ' + f.text.replace(' · ', ', ');
+    const lines = wrap(ctx, text, R - L - 50).slice(0, 2);
+    if (y + 20 + lines.length * 46 > footerY - 40) break;
+    y += 20;
+    ctx.fillStyle = f.key === 'last' ? RED : INK;
+    ctx.fillRect(L, y + 14, 16, 16);
+    ctx.fillStyle = INK;
+    lines.forEach((ln, k) => ctx.fillText(ln, L + 40, y + 34 + k * 46));
+    y += lines.length * 46;
   }
 
-  // Pied de carte.
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#fff'; ctx.font = `700 44px ${DISPLAY}`;
-  ctx.fillText('Qui relève le défi ?', W / 2, 1805);
-  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `500 30px ${BODY}`;
-  ctx.fillText(ellipsis(ctx, 'Mario Kart Party  ·  ' + appUrl().replace(/^https?:\/\//, '').replace(/\/$/, ''), 920), W / 2, 1848);
+  // Talon : défi + code-barres.
+  perforation(ctx, X0, X1, footerY);
+  ctx.textAlign = 'left'; ctx.fillStyle = INK;
+  ctx.font = `700 50px ${DISPLAY}`;
+  ctx.fillText('Qui relève', L, footerY + 92);
+  ctx.fillText('le défi ?', L, footerY + 148);
+  ctx.font = `500 24px ${BODY}`; ctx.fillStyle = 'rgba(29,27,46,.7)';
+  ctx.fillText(ellipsis(ctx, appUrl().replace(/^https?:\/\//, '').replace(/\/$/, ''), 430), L, footerY + 192);
+  let bx = R - 330;
+  ctx.fillStyle = INK;
+  while (bx < R) { const w = 2 + Math.floor(rnd() * 4) * 2; ctx.fillRect(bx, footerY + 58, w, 110); bx += w + 3 + Math.floor(rnd() * 3) * 3; }
+  ctx.font = `500 20px ${BODY}`; ctx.textAlign = 'right';
+  ctx.fillText('MKP-' + String(gp.id || '').slice(-6).toUpperCase(), R, footerY + 192);
+  ctx.restore();
   return canvas;
 }
 
