@@ -4,13 +4,13 @@
 // ============================================================
 
 import { getState, save, flushSave, findSession, getPlayers } from './store.js';
-import { h, toast, confirmModal, avatarEl } from './ui.js';
+import { h, toast, confirmModal, avatarEl, moreMenu } from './ui.js';
 import {
   raceComplete, gpStandings, gpFinished, pointsFor, raceWinners,
   sessionRankingDelta, gpHighlights, ordinal,
 } from './engine.js';
 import { startGrandPrix, replaceRace } from './draw.js';
-import { raceGame, gameStyle, gamePill, racersFor } from './race-visuals.js';
+import { raceGame, gameStyle, gamePill, racersFor, icon, rerollButton } from './race-visuals.js';
 import { NotFound } from './views.js';
 
 export const gpUrl = (session, gp) => '#/session/' + session.id + '/gp/' + gp.id;
@@ -21,12 +21,6 @@ export function launchGp(session) {
   if (!gp || !flushSave()) return;
   location.hash = gpUrl(session, gp);
 }
-
-const svg = (markup) => h('span', { class: 'gp-icon', 'aria-hidden': 'true', html: markup });
-// Kart vu du dessus, roulant vers le bas de la piste.
-const KART = '<svg viewBox="0 0 32 40"><rect x="2" y="6" width="7" height="10" rx="2" class="k-wheel"/><rect x="23" y="6" width="7" height="10" rx="2" class="k-wheel"/><rect x="2" y="25" width="7" height="10" rx="2" class="k-wheel"/><rect x="23" y="25" width="7" height="10" rx="2" class="k-wheel"/><path d="M8 4h16l3 10v14l-4 9H9l-4-9V14z" class="k-body"/><circle cx="16" cy="17" r="5.5" class="k-helmet"/><rect x="10" y="30" width="12" height="3" rx="1.5" class="k-bumper"/></svg>';
-const REROLL = '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>';
-const CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 export function GpView(sessionId, gpId, requestedRaceNum = null) {
   const session = findSession(sessionId);
@@ -48,43 +42,25 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   let celebrated = gpFinished(gp, players.length);
 
   // ---------- En-tête et menu « … » ----------
-  const menu = h('div', { class: 'gp-menu', hidden: true, role: 'menu' },
-    h('button', {
-      class: 'gp-menu-item is-danger', role: 'menuitem', 'data-testid': 'button-cancel-gp',
-      onclick: () => {
-        menu.hidden = true;
-        confirmModal({
-          title: 'Supprimer ce Grand Prix ?',
-          message: 'Ses courses et ses points seront retirés de la soirée.',
-          confirmLabel: 'Supprimer', danger: true,
-          onConfirm: () => {
-            session.grandPrix = session.grandPrix.filter((g) => g.id !== gp.id);
-            save();
-            toast('Grand Prix supprimé');
-            location.hash = '#/session/' + sessionId;
-          },
-        });
+  const menu = moreMenu([{
+    label: 'Supprimer le Grand Prix', danger: true, testid: 'button-cancel-gp',
+    onClick: () => confirmModal({
+      title: 'Supprimer ce Grand Prix ?',
+      message: 'Ses courses et ses points seront retirés de la soirée.',
+      confirmLabel: 'Supprimer', danger: true,
+      onConfirm: () => {
+        session.grandPrix = session.grandPrix.filter((g) => g.id !== gp.id);
+        save();
+        toast('Grand Prix supprimé');
+        location.hash = '#/session/' + sessionId;
       },
-    }, 'Supprimer le Grand Prix'));
-  const menuBtn = h('button', {
-    class: 'gp-menu-btn', 'aria-label': 'Plus d’actions', 'aria-haspopup': 'menu', 'aria-expanded': 'false',
-    'data-testid': 'button-gp-menu',
-    onclick: (e) => {
-      e.stopPropagation();
-      menu.hidden = !menu.hidden;
-      menuBtn.setAttribute('aria-expanded', String(!menu.hidden));
-    },
-  }, '…');
-  const closeMenu = (e) => {
-    if (!view.isConnected) { document.removeEventListener('click', closeMenu); return; }
-    if (!menu.hidden && !menu.contains(e.target)) { menu.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); }
-  };
-  document.addEventListener('click', closeMenu);
+    }),
+  }], { testid: 'button-gp-menu' });
   const header = h('header', { class: 'gp-head' },
     h('a', { class: 'back-link', href: '#/session/' + sessionId }, '← ' + session.name),
     h('div', { class: 'gp-head-row' },
       h('h1', { class: 'page-title' }, 'Grand Prix ' + gpNumber),
-      h('div', { class: 'gp-menu-wrap' }, menuBtn, menu)));
+      menu));
 
   const bar = h('div', { class: 'gp-bar', 'data-testid': 'gp-live-ranking', 'aria-label': 'Classement du Grand Prix' });
   const trackBox = h('div', { class: 'gp-track-box' });
@@ -110,8 +86,8 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     const open = race.num === active;
     const winners = done ? raceWinners(race).map((pid) => byId[pid]?.name).filter(Boolean) : [];
     const node = open
-      ? h('span', { class: 'gp-node is-kart' }, svg(KART), h('span', { class: 'gp-node-num' }, String(race.num)))
-      : done ? h('span', { class: 'gp-node is-done' }, svg(CHECK))
+      ? h('span', { class: 'gp-node is-kart' }, icon('kart'), h('span', { class: 'gp-node-num' }, String(race.num)))
+      : done ? h('span', { class: 'gp-node is-done' }, icon('check'))
       : h('span', { class: 'gp-node' }, String(race.num).padStart(2, '0'));
     const headBtn = h('button', {
       class: 'gp-stop-head', 'data-testid': 'race-' + race.num,
@@ -121,13 +97,9 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       h('span', { class: 'gp-stop-name' }, race.contentName),
       gamePill(game),
       winners.length && !open ? h('span', { class: 'gp-stop-winner' }, winners.join(', ')) : null);
-    const replaceBtn = open && !Object.keys(race.results || {}).length ? h('button', {
-      class: 'gp-reroll', 'aria-label': 'Changer de circuit', title: 'Changer de circuit',
-      'data-testid': 'button-replace-race-' + race.num,
-      onclick: () => {
-        if (replaceRace(st, gp, race)) { toast('Nouveau circuit : ' + race.contentName); rerender(); }
-      },
-    }, svg(REROLL)) : null;
+    const replaceBtn = open && !Object.keys(race.results || {}).length ? rerollButton(() => {
+      if (replaceRace(st, gp, race)) { toast('Nouveau circuit : ' + race.contentName); rerender(); }
+    }, 'button-replace-race-' + race.num) : null;
     return h('li', {
       class: 'gp-stop' + (open ? ' is-open' : '') + (done ? ' is-done' : ''),
       style: gameStyle(game), 'data-race': race.num,
@@ -146,7 +118,7 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       doneBlock = h('details', { class: 'gp-done', open: doneOpen, 'data-testid': 'gp-done' },
         h('summary', {},
           h('span', { class: 'gp-road is-travelled', 'aria-hidden': 'true' },
-            h('span', { class: 'gp-node is-done' }, svg(CHECK))),
+            h('span', { class: 'gp-node is-done' }, icon('check'))),
           h('span', { class: 'gp-done-label' },
             doneRaces.length + (doneRaces.length > 1 ? ' courses saisies' : ' course saisie')),
           h('span', { class: 'gp-done-mark', 'aria-hidden': 'true' }, '⌄')),

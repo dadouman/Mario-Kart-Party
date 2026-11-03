@@ -55,6 +55,30 @@ export function toast(msg, kind = '', { action = null, duration = 2600 } = {}) {
   return t;
 }
 
+// ---------- Menu « … » ----------
+
+export function moreMenu(items, { label = 'Plus d’actions', testid = 'button-more' } = {}) {
+  const menu = h('div', { class: 'more-menu', hidden: true, role: 'menu' });
+  const btn = h('button', {
+    class: 'more-btn', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'data-testid': testid,
+    onclick: (e) => { e.stopPropagation(); menu.hidden ? open() : close(); },
+  }, '…');
+  const wrap = h('div', { class: 'more-wrap' }, btn, menu);
+  function open() { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); menu.querySelector('button')?.focus(); }
+  function close() { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+  items.filter(Boolean).forEach((it) => menu.append(h('button', {
+    class: 'more-item' + (it.danger ? ' is-danger' : ''), role: 'menuitem', 'data-testid': it.testid,
+    onclick: () => { close(); it.onClick(); },
+  }, it.label)));
+  menu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); btn.focus(); } });
+  const outside = (e) => {
+    if (!wrap.isConnected) { document.removeEventListener('click', outside); return; }
+    if (!menu.hidden && !wrap.contains(e.target)) close();
+  };
+  document.addEventListener('click', outside);
+  return wrap;
+}
+
 // ---------- Modales ----------
 
 let activeModalClose = null;

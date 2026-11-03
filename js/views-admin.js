@@ -7,11 +7,11 @@ import {
   getState, save, flushSave, findGame, newId,
   exportJSON, importJSON, resetAll, isPersistent, previousBackup,
 } from './store.js';
-import { h, render, toast, modal, confirmModal, fmtDate, download, readFile, avatarEl } from './ui.js';
+import { h, render, toast, modal, confirmModal, fmtDate, download, readFile, avatarEl, moreMenu } from './ui.js';
 import { sessionRanking, allTimeStats } from './engine.js';
 import { NotFound, HomeView } from './views.js';
 import { DrawPrefsEditor, drawCourses, getDrawPrefs } from './draw.js';
-import { raceGame, gameStyle, gameBadge, timelineStep, racersFor } from './race-visuals.js';
+import { raceGame, gameStyle, gamePill, racersFor, rerollButton } from './race-visuals.js';
 import { APP_VERSION } from './updates.js';
 
 const S = () => getState();
@@ -24,28 +24,17 @@ const isUsed = (st, contentId) => st.sessions.some((s) =>
 export function TirageView() {
   const st = S();
   let items = [];
-  let lockedIds = [];
-  const resultsBox = h('div', { class: 'draw-results' });
-  const resultsTitle = h('h2', { class: 'section-title', style: 'margin:0', tabindex: '-1' }, 'Votre grille');
-  const rerollBtn = h('button', { class: 'btn btn-outline btn-sm', 'data-testid': 'button-reroll',
-    onclick: () => draw(true) }, 'Relancer les courses libres');
+  const resultsBox = h('section', { class: 'draw-output', 'aria-label': 'Courses tirées', tabindex: '-1', hidden: true });
   const drawBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-draw',
-    onclick: () => draw(false) }, 'Tirer au sort');
+    onclick: () => draw() }, 'Tirer au sort');
 
-  function draw(keepLocked) {
-    const locked = keepLocked ? items.filter((c) => lockedIds.includes(c.id)) : [];
-    const res = drawCourses(st, getDrawPrefs(st), { lockedItems: locked, count: keepLocked ? items.length : undefined });
+  function draw() {
+    const res = drawCourses(st, getDrawPrefs(st));
     if (res.error) { toast('Pas assez de circuits disponibles avec ces jeux', 'err'); return; }
-    if (keepLocked) {
-      const fresh = res.items.filter((c) => !lockedIds.includes(c.id));
-      items = items.map((c) => lockedIds.includes(c.id) ? c : fresh.shift());
-    } else {
-      items = res.items;
-      lockedIds = [];
-    }
+    items = res.items;
     refresh();
-    resultsTitle.focus({ preventScroll: true });
-    resultsTitle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    resultsBox.focus({ preventScroll: true });
+    resultsBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function changeOne(index) {
@@ -56,54 +45,32 @@ export function TirageView() {
   }
 
   function refresh() {
-    rerollBtn.hidden = !items.length;
-    rerollBtn.disabled = items.length > 0 && items.every((c) => lockedIds.includes(c.id));
-    if (!items.length) {
-      resultsBox.replaceChildren(h('p', { class: 'sub' }, 'Choisissez vos jeux, puis tirez au sort.'));
-      return;
-    }
-    const timeline = h('ol', { class: 'race-timeline', 'aria-label': 'Ordre des courses tirées' });
-    items.forEach((c, index) => {
-      const game = raceGame(c);
-      const locked = lockedIds.includes(c.id);
-      const card = h('div', { class: 'draw-course draw-card timeline-card' + (locked ? ' is-locked' : ''), style: gameStyle(game) },
-        h('div', { class: 'draw-course-copy' },
-          gameBadge(game),
-          h('div', { class: 'draw-name' }, c.name),
-          h('div', { class: 'sub' }, c.editionName || 'Jeu de base')),
-        h('div', { class: 'draw-course-tools' },
-          h('button', {
-            class: 'lock-btn' + (locked ? ' on' : ''), 'aria-pressed': String(locked),
-            'aria-label': (locked ? 'Libérer ' : 'Garder ') + c.name,
-            onclick: () => {
-              lockedIds = locked ? lockedIds.filter((x) => x !== c.id) : [...lockedIds, c.id];
-              refresh();
-            },
-          }, locked ? 'Gardée' : 'Garder'),
-          h('button', {
-            class: 'btn btn-ghost btn-sm', disabled: locked, 'data-testid': 'reroll-course-' + index,
-            'aria-label': 'Remplacer ' + c.name, onclick: () => changeOne(index),
-          }, 'Changer')));
-      timeline.append(timelineStep({
-        index, game, previousGame: index ? raceGame(items[index - 1]) : null, card,
-        label: index === 0 ? 'DÉPART' : index === items.length - 1 ? 'DERNIÈRE COURSE' : '',
-      }));
-    });
-    resultsBox.replaceChildren(timeline, h('div', { class: 'timeline-finish' }, 'ARRIVÉE · ' + pl(items.length, 'course')));
+    drawBtn.textContent = items.length ? 'Nouveau tirage' : 'Tirer au sort';
+    resultsBox.hidden = !items.length;
+    if (!items.length) { resultsBox.replaceChildren(); return; }
+    resultsBox.replaceChildren(
+      h('ol', { class: 'gp-track', 'aria-label': 'Ordre des courses' }, items.map((c, index) => {
+        const game = raceGame(c);
+        return h('li', { class: 'gp-stop', style: gameStyle(game) },
+          h('div', { class: 'gp-road', 'aria-hidden': 'true' },
+            h('span', { class: 'gp-node' }, String(index + 1).padStart(2, '0'))),
+          h('div', { class: 'gp-stop-card' },
+            h('div', { class: 'gp-stop-top' },
+              h('div', { class: 'gp-stop-head' },
+                h('span', { class: 'gp-stop-name draw-name' }, c.name), gamePill(game)),
+              rerollButton(() => changeOne(index), 'reroll-course-' + index))));
+      })),
+      h('div', { class: 'gp-finish is-reached' }, h('span', { class: 'gp-finish-flag', 'aria-hidden': 'true' }), 'Arrivée'));
   }
   refresh();
 
   return h('div', { class: 'stack fade-in draw-page' },
     h('a', { class: 'back-link', href: '#/' }, '← Soirée'),
     h('h1', { class: 'page-title' }, 'Tirage express'),
-    h('p', { class: 'sub' }, 'Juste les circuits, sans scores. Pour compter les points, lancez une soirée.'),
-    h('div', { class: 'draw-layout' },
-      h('section', { class: 'card card-pad-lg stack draw-config', 'aria-label': 'Jeux et courses' },
-        DrawPrefsEditor(st, { onChange: () => { items = []; lockedIds = []; refresh(); } }),
-        drawBtn),
-      h('section', { class: 'card card-pad-lg stack draw-output', 'aria-label': 'Résultat du tirage' },
-        h('div', { class: 'spread' }, resultsTitle, rerollBtn),
-        resultsBox)));
+    h('section', { class: 'card card-pad-lg stack draw-config', 'aria-label': 'Jeux et courses' },
+      DrawPrefsEditor(st, { onChange: () => { items = []; refresh(); } }),
+      drawBtn),
+    resultsBox);
 }
 
 // ---------- Jeux (dans les réglages) ----------
@@ -283,39 +250,43 @@ export function GameView(gameId, { importing = false } = {}) {
     h('a', { class: 'back-link', href: '#/reglages' }, '← Réglages'),
     h('div', { class: 'page-head' },
       h('h1', { class: 'page-title' }, game.icon + '  ' + game.name),
-      h('div', { class: 'row' },
-        h('button', { class: 'btn btn-ghost btn-sm', 'data-testid': 'button-edit-game', onclick: () => gameModal(game) }, 'Modifier'),
-        h('button', { class: 'btn btn-danger btn-sm', onclick: deleteGame }, 'Supprimer'))),
-    h('div', { class: 'row' },
-      h('a', { class: 'btn btn-primary', 'data-testid': 'button-import-contents', href: '#/jeux/' + gameId + '/import' }, 'Ajouter des circuits'),
-      h('button', { class: 'btn btn-outline', 'data-testid': 'button-add-edition', onclick: () => editionModal() }, '+ Édition')),
-    h('p', { class: 'sub' }, 'Un interrupteur éteint exclut le circuit des tirages sans le supprimer.'),
-    h('div', { class: 'stack' }, game.editions.map((ed) => {
+      moreMenu([
+        { label: 'Modifier le jeu', testid: 'button-edit-game', onClick: () => gameModal(game) },
+        { label: 'Nouvelle édition', testid: 'button-add-edition', onClick: () => editionModal() },
+        { label: 'Supprimer le jeu', danger: true, testid: 'button-delete-game', onClick: deleteGame },
+      ], { testid: 'button-game-menu' })),
+    h('a', { class: 'btn btn-primary btn-block', 'data-testid': 'button-import-contents', href: '#/jeux/' + gameId + '/import' }, 'Ajouter des circuits'),
+    h('div', { class: 'stack', style: 'gap:8px' }, game.editions.map((ed) => {
       const contents = visible(ed);
-      return h('details', { class: 'accord', open: game.editions.length < 3 },
+      const on = contents.filter((c) => c.active !== false).length;
+      const count = h('span', { class: 'badge' }, on === contents.length ? String(on) : on + '/' + contents.length);
+      return h('details', { class: 'accord', 'data-testid': 'edition-' + ed.id },
         h('summary', {},
-          h('span', { class: 'row' }, ed.name + (ed.dlc ? ' (DLC)' : ''), h('span', { class: 'badge' }, contents.length))),
+          h('span', { class: 'row' }, ed.name + (ed.dlc ? ' (DLC)' : ''), count)),
         h('div', { class: 'accord-body stack' },
           h('div', { class: 'row' },
-            h('button', { class: 'btn btn-ghost btn-sm', onclick: () => editionModal(ed) }, 'Modifier'),
+            h('button', { class: 'btn btn-ghost btn-sm', onclick: () => editionModal(ed) }, 'Renommer'),
             contents.length ? h('button', {
               class: 'btn btn-ghost btn-sm', 'data-testid': 'button-manage-contents-' + ed.id,
               onclick: () => manageModal(ed),
             }, 'Supprimer des circuits') : null),
-          contents.length ? h('div', { class: 'stack' }, contents.map((c) => h('div', { class: 'content-row' },
+          contents.length ? h('div', { class: 'stack', style: 'gap:6px' }, contents.map((c) => h('div', { class: 'content-row' },
             h('span', { class: 'content-name', style: 'flex:1' }, c.name),
             h('button', {
               class: 'switch' + (c.active !== false ? ' on' : ''), role: 'switch',
               'aria-checked': String(c.active !== false),
               'aria-label': c.name + ' dans les tirages',
+              title: 'Inclure dans les tirages',
               onclick: (e) => {
                 c.active = c.active === false;
                 e.currentTarget.classList.toggle('on', c.active);
                 e.currentTarget.setAttribute('aria-checked', String(c.active));
+                const n = contents.filter((x) => x.active !== false).length;
+                count.textContent = n === contents.length ? String(n) : n + '/' + contents.length;
                 save();
               },
             }))))
-            : h('p', { class: 'sub' }, 'Aucun circuit dans cette édition.')));
+            : h('p', { class: 'sub' }, 'Aucun circuit.')));
     })));
 }
 
@@ -372,6 +343,7 @@ function ImportView(game) {
     game.editions.map((ed) => h('option', { value: ed.id }, ed.name)));
   const targetField = h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Ajouter dans'), edSel);
   const previewBox = h('div', { class: 'stack import-preview' });
+  const reviewBox = h('section', { class: 'card card-pad-lg stack import-review', 'aria-label': 'Aperçu avant import' });
   const importBtn = h('button', { class: 'btn btn-primary btn-block', 'data-testid': 'button-import' }, 'Importer');
   const existing = () => new Set(game.editions.flatMap((e) => e.contents.filter((c) => !c.archived).map((c) => c.name.toLowerCase())));
 
@@ -379,13 +351,11 @@ function ImportView(game) {
     const parsed = parseList(ta.value);
     const known = existing();
     const total = parsed.reduce((n, g) => n + g.contents.length, 0);
-    targetField.hidden = parsed.some((g) => g.name);
+    targetField.hidden = game.editions.length < 2 || parsed.some((g) => g.name);
     importBtn.disabled = !total;
     importBtn.textContent = total ? 'Importer ' + pl(total, 'circuit') : 'Importer';
-    if (!total) {
-      previewBox.replaceChildren(h('p', { class: 'sub', style: 'text-align:center' }, 'L\u2019aperçu apparaîtra ici.'));
-      return;
-    }
+    reviewBox.hidden = !total;
+    if (!total) { previewBox.replaceChildren(); return; }
     previewBox.replaceChildren(...parsed.map((g, gi) => h('div', { class: 'card', style: 'padding:10px 12px' },
       h('div', { class: 'spread' },
         h('strong', { style: 'font-size:.9rem' }, g.name || edSel.selectedOptions[0]?.textContent || 'Circuits'),
@@ -407,7 +377,7 @@ function ImportView(game) {
   ta.addEventListener('input', refresh);
   edSel.addEventListener('change', refresh);
 
-  const fileInput = h('input', { type: 'file', class: 'input', 'data-testid': 'input-import-file',
+  const fileInput = h('input', { type: 'file', class: 'sr-only', 'data-testid': 'input-import-file',
     accept: '.txt,.csv,.json,text/plain,text/csv,application/json' });
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
@@ -452,32 +422,30 @@ function ImportView(game) {
     location.hash = '#/jeux/' + game.id;
   });
 
+  reviewBox.append(h('h2', { class: 'section-title', style: 'margin:0' }, 'Aperçu'), previewBox, importBtn);
   refresh();
   return h('div', { class: 'stack fade-in import-page' },
     h('a', { class: 'back-link', href: '#/jeux/' + game.id }, '← ' + game.name),
     h('h1', { class: 'page-title' }, 'Ajouter des circuits'),
     h('div', { class: 'import-layout' },
       h('section', { class: 'card card-pad-lg stack', 'aria-label': 'Liste des circuits' },
-        h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Coller la liste'), ta),
+        ta,
         targetField,
-        h('details', { class: 'draw-options' }, h('summary', {}, 'Depuis un fichier'),
-          h('div', { class: 'stack' }, fileInput,
-            h('p', { class: 'sub' }, 'Txt : un circuit par ligne · CSV : première colonne · JSON : liste de noms ou { editions: [{ name, contents }] }.'))),
-        h('details', { class: 'draw-options' }, h('summary', {}, 'Préparer la liste avec une IA'),
-          h('div', { class: 'stack' },
-            h('p', { class: 'sub' }, prompt),
-            h('button', {
-              class: 'btn btn-outline btn-block', 'data-testid': 'button-open-ai',
-              onclick: () => {
-                const w = window.open('https://www.perplexity.ai/search?q=' + encodeURIComponent(prompt), '_blank');
-                if (!w) toast('Ouverture bloquée par le navigateur', 'err');
-              },
-            }, 'Ouvrir dans Perplexity'),
-            h('p', { class: 'sub' }, 'Collez ensuite la réponse dans la liste ci-dessus.')))),
-      h('section', { class: 'card card-pad-lg stack import-review', 'aria-label': 'Aperçu avant import' },
-        h('h2', { class: 'section-title' }, 'Aperçu'),
-        h('p', { class: 'sub' }, 'Retirez les erreurs. Rien n\u2019est ajouté avant le clic sur Importer.'),
-        previewBox, importBtn)));
+        h('div', { class: 'row' },
+          h('button', {
+            class: 'btn btn-outline btn-sm', 'data-testid': 'button-import-file',
+            title: 'Txt : un circuit par ligne · CSV : première colonne · JSON : liste de noms',
+            onclick: () => fileInput.click(),
+          }, 'Depuis un fichier'),
+          h('button', {
+            class: 'btn btn-outline btn-sm', 'data-testid': 'button-open-ai', title: prompt,
+            onclick: () => {
+              const w = window.open('https://www.perplexity.ai/search?q=' + encodeURIComponent(prompt), '_blank');
+              if (!w) toast('Ouverture bloquée par le navigateur', 'err');
+            },
+          }, 'Demander à Perplexity'),
+          fileInput)),
+      reviewBox));
 }
 
 // ---------- Classement ----------
@@ -554,48 +522,28 @@ export function ClassementView() {
       : h('p', { class: 'sub' }, 'Aucune soirée pour l\u2019instant.');
   }
 
-  const exportCsvBtn = h('button', {
-    class: 'btn btn-outline btn-sm',
-    onclick: () => {
-      const rows = [['Joueur', 'Points', 'Victoires', 'Podiums', 'GP']];
-      for (const r of allTimeStats(st.sessions, st.players)) {
-        const p = st.players.find((x) => x.id === r.pid);
-        rows.push([p ? p.name : '?', r.pts, r.wins, r.podiums, r.gps]);
-      }
-      const csv = rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n');
-      download('classement-mario-kart-party.csv', '\ufeff' + csv, 'text/csv');
-      toast('Classement exporté (CSV)');
-    },
-  }, 'Exporter en CSV');
-
   return h('div', { class: 'stack fade-in' },
-    h('div', { class: 'page-head' },
-      h('div', {},
-        h('h1', { class: 'page-title' }, 'Classements'),
-        h('p', { class: 'sub' }, 'Les points comptent dès qu\u2019une course est saisie.')
-      ),
-      exportCsvBtn
-    ),
+    h('h1', { class: 'page-title' }, 'Classements'),
     tabs,
     body
   );
+}
+
+function exportCsv(st) {
+  const rows = [['Joueur', 'Points', 'Victoires', 'Podiums', 'GP']];
+  for (const r of allTimeStats(st.sessions, st.players)) {
+    const p = st.players.find((x) => x.id === r.pid);
+    rows.push([p ? p.name : '?', r.pts, r.wins, r.podiums, r.gps]);
+  }
+  const csv = rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n');
+  download('classement-mario-kart-party.csv', '\ufeff' + csv, 'text/csv');
+  toast('Classement exporté (CSV)');
 }
 
 // ---------- Réglages ----------
 
 export function ReglagesView() {
   const st = S();
-
-  const nameInput = h('input', {
-    class: 'input', type: 'text', value: st.settings.appName,
-    'data-testid': 'input-app-name', 'aria-label': 'Nom de l\u2019application',
-  });
-  nameInput.addEventListener('change', () => {
-    st.settings.appName = nameInput.value.trim() || 'Mario Kart Party';
-    save();
-    document.getElementById('brand-name').textContent = st.settings.appName;
-    toast('Nom enregistré');
-  });
 
   // Barème
   const baremeBox = h('div', { class: 'pos-grid' });
@@ -648,64 +596,50 @@ export function ReglagesView() {
     fileInput.value = '';
   });
 
+  const baremeSummary = st.settings.bareme.slice(0, 4).join(' · ') + ' …';
   return h('div', { class: 'stack fade-in' },
     h('h1', { class: 'page-title' }, 'Réglages'),
     GamesSection(),
+    h('details', { class: 'accord', 'data-testid': 'section-bareme' },
+      h('summary', {}, h('span', { class: 'row' }, 'Barème des points', h('span', { class: 'sub' }, baremeSummary))),
+      h('div', { class: 'accord-body stack' }, baremeBox)),
     h('div', { class: 'card card-pad-lg stack' },
-      h('h2', { class: 'section-title' }, 'Application'),
-      h('p', { class: 'sub', 'data-testid': 'app-version' }, 'Version ' + APP_VERSION),
-      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Nom affiché'), nameInput),
-      h('p', { class: 'sub' }, 'Thème : utilisez l\u2019icône lune/soleil dans l\u2019en-tête. L\u2019app suit le réglage de votre appareil par défaut.')
-    ),
-    h('div', { class: 'card card-pad-lg stack' },
-      h('h2', { class: 'section-title' }, 'Barème par position'),
-      h('p', { class: 'sub' }, 'Points par place réelle, bots compris. Chaque Grand Prix garde le barème en vigueur à sa création.'),
-      baremeBox
-    ),
-    h('div', { class: 'card card-pad-lg stack' },
-      h('h2', { class: 'section-title' }, 'Données'),
-      h('button', {
-        class: 'btn btn-ghost', disabled: !previousBackup(), 'data-testid': 'button-export-previous',
-        onclick: () => {
-          const backup = previousBackup();
-          if (backup) download('mario-kart-party-sauvegarde-precedente.json', backup, 'application/json');
-        },
-      }, 'Exporter la sauvegarde précédente'),
-      h('p', { class: 'sub' },
-        isPersistent()
-          ? 'Vos données sont enregistrées uniquement sur cet appareil (stockage local du navigateur). Exportez une sauvegarde régulièrement : effacer les données du navigateur supprimerait la sauvegarde.'
-          : 'Sauvegarde locale indisponible dans cet aperçu intégré. Installez l\u2019application sur votre appareil pour conserver vos données.'),
+      h('h2', { class: 'section-title', style: 'margin:0' }, 'Données'),
+      h('p', { class: 'sub', style: 'margin:0' }, isPersistent()
+        ? 'Stockées sur cet appareil uniquement.'
+        : 'Aperçu intégré : rien n\u2019est conservé ici.'),
       h('div', { class: 'row' },
         h('button', {
-          class: 'btn btn-ghost', 'data-testid': 'button-export',
-          onclick: () => {
-            download('mario-kart-party-sauvegarde.json', exportJSON());
-            toast('Sauvegarde exportée');
-          },
-        }, 'Exporter (JSON)'),
-        h('button', {
-          class: 'btn btn-ghost', 'data-testid': 'button-import',
-          onclick: () => fileInput.click(),
-        }, 'Importer une sauvegarde'),
-        fileInput
-      ),
-      h('hr', { class: 'divider' }),
-      h('button', {
-        class: 'btn btn-danger', 'data-testid': 'button-reset',
-        onclick: () => confirmModal({
-          title: 'Tout effacer ?',
-          message: 'Soirées, résultats, jeux personnalisés et joueurs seront supprimés. Les jeux préchargés seront rétablis. Cette action est irréversible.',
-          confirmLabel: 'Tout effacer', danger: true,
-          onConfirm: () => {
-            resetAll();
-            toast('Données réinitialisées');
-            render(HomeView());
-            location.hash = '#/';
-          },
-        }),
-      }, 'Réinitialiser toutes les données')
-    ),
-    h('p', { class: 'sub', style: 'font-size:.8rem' },
-      'Application non officielle, sans affiliation avec Nintendo. Mario Kart est une marque de Nintendo. Les listes de circuits préchargées sont indicatives et modifiables.')
-  );
+          class: 'btn btn-outline btn-sm', 'data-testid': 'button-export',
+          onclick: () => { download('mario-kart-party-sauvegarde.json', exportJSON()); toast('Sauvegarde exportée'); },
+        }, 'Exporter'),
+        h('button', { class: 'btn btn-outline btn-sm', 'data-testid': 'button-import', onclick: () => fileInput.click() }, 'Importer'),
+        h('button', { class: 'btn btn-outline btn-sm', 'data-testid': 'button-export-csv', onclick: () => exportCsv(st) }, 'Classement CSV'),
+        fileInput),
+      h('details', { class: 'draw-options' },
+        h('summary', {}, 'Plus d\u2019options'),
+        h('div', { class: 'stack' },
+          h('button', {
+            class: 'btn btn-ghost btn-sm', disabled: !previousBackup(), 'data-testid': 'button-export-previous',
+            onclick: () => {
+              const backup = previousBackup();
+              if (backup) download('mario-kart-party-sauvegarde-precedente.json', backup, 'application/json');
+            },
+          }, 'Exporter la sauvegarde précédente'),
+          h('button', {
+            class: 'btn btn-danger btn-sm', 'data-testid': 'button-reset',
+            onclick: () => confirmModal({
+              title: 'Tout effacer ?',
+              message: 'Soirées, résultats, jeux personnalisés et joueurs seront supprimés. Les jeux préchargés seront rétablis. Cette action est irréversible.',
+              confirmLabel: 'Tout effacer', danger: true,
+              onConfirm: () => {
+                resetAll();
+                toast('Données réinitialisées');
+                render(HomeView());
+                location.hash = '#/';
+              },
+            }),
+          }, 'Réinitialiser toutes les données')))),
+    h('p', { class: 'sub', style: 'font-size:.75rem;text-align:center', 'data-testid': 'app-version' },
+      'Version ' + APP_VERSION + ' · Application non officielle, sans lien avec Nintendo.'));
 }

@@ -27,8 +27,8 @@
 - **Grille des places** : on touche une place (1 à 12, ou 24 pour Mario Kart World) puis le joueur ; les cases vides sont les bots. La course s'enregistre seule quand tout le monde est placé, avec « Annuler » quelques secondes.
 - **Récap de fin de GP** : podium animé, faits marquants (roi des courses, meilleure remontée, course la plus serrée) et classement de la soirée avec les places gagnées ou perdues.
 - **Pas de validation** : chaque course saisie compte immédiatement au classement et reste modifiable.
-- **Tirage express** : juste une grille de circuits, sans scores (Garder / Changer / Relancer).
-- **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV.
+- **Tirage express** : juste une grille de circuits, sans scores ; chaque circuit se relance individuellement.
+- **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV depuis les Réglages.
 - **Hors ligne, sans compte, sans serveur** ; export / import JSON.
 
 ## Démarrage rapide

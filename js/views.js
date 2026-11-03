@@ -10,7 +10,7 @@ import {
   h, render, toast, fmtDate, avatarEl, PLAYER_COLORS,
 } from './ui.js';
 import {
-  raceComplete, gpFinished, sessionRanking,
+  raceComplete, gpFinished, sessionRanking, gpStandings,
 } from './engine.js';
 import { DrawPrefsEditor, startGrandPrix } from './draw.js';
 import { gpUrl, launchGp, GpView, RaceView } from './gp.js';
@@ -26,8 +26,6 @@ const ongoingGp = (session) => session.grandPrix.slice().reverse()
 function rankingList(session, players) {
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]));
   const ranking = sessionRanking(session);
-  const started = session.grandPrix.some((gp) => gp.races.some((r) => Object.keys(r.results || {}).length));
-  if (!started) return h('p', { class: 'sub' }, 'Les points apparaissent dès la première course saisie.');
   return h('div', { class: 'stack' },
     ranking.map((row) => h('div', { class: 'rank-row' + (row.rank === 1 ? ' first' : '') },
       h('span', { class: 'rank-pos' }, String(row.rank)),
@@ -44,9 +42,7 @@ export function HomeView() {
 
   if (!last) {
     return h('div', { class: 'stack fade-in' },
-      h('div', {},
-        h('h1', { class: 'page-title' }, 'Prêt pour la soirée ?'),
-        h('p', { class: 'sub' }, 'Ajoutez les joueurs, les courses sont tirées au sort, saisissez les places. Tout reste sur cet appareil.')),
+      h('h1', { class: 'page-title' }, 'Prêt pour la soirée ?'),
       storageWarning(),
       h('a', { class: 'btn btn-primary btn-block', href: '#/nouvelle-session', 'data-testid': 'button-new-session' }, 'Lancer une soirée'),
       h('a', { class: 'btn btn-ghost btn-block', href: '#/tirage', 'data-testid': 'link-express' }, 'Tirage express (sans scores)'));
@@ -127,14 +123,12 @@ export function NewSessionView() {
       'aria-label': 'Retirer ' + p.name, title: 'Retirer',
       onclick: () => { draft.players.splice(i, 1); refreshAll(); },
     }, avatarEl(p), p.name, h('span', { 'aria-hidden': 'true' }, '×'))));
-    if (!draft.players.length) chipsBox.append(h('span', { class: 'sub' }, 'Au moins 2 joueurs.'));
   }
 
   function refreshSuggestions() {
     const used = new Set(draft.players.map((p) => p.id));
     const favs = st.players.filter((p) => !p.archived && !used.has(p.id)).slice(-8).reverse();
     suggestionsBox.replaceChildren(...(favs.length ? [
-      h('span', { class: 'sub', style: 'width:100%' }, 'Joueurs connus :'),
       ...favs.map((p) => h('button', {
         class: 'player-chip', 'data-testid': 'suggest-' + p.name,
         onclick: () => addPlayer(p.name, p),
@@ -200,10 +194,10 @@ export function NewSessionView() {
           }, 'Ajouter')),
         chipsBox,
         h('div', { class: 'row', style: 'margin-top:12px' }, suggestionsBox)),
-      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Nom de la soirée'), nameInput)),
+      h('details', { class: 'draw-options' },
+        h('summary', {}, 'Nom de la soirée'), nameInput)),
     DrawPrefsEditor(st, { collapsed: true }),
-    createBtn,
-    h('p', { class: 'sub' }, 'Le premier Grand Prix est tiré au sort et démarre tout de suite.'));
+    createBtn);
 }
 
 // ---------- Détail d'une soirée ----------
@@ -216,27 +210,25 @@ export function SessionView(sessionId) {
   const players = getPlayers(session.playerIds);
   const ongoing = ongoingGp(session);
 
-  const gpCards = session.grandPrix.slice().reverse().map((gp) => {
+  const gpCards = session.grandPrix.map((gp, index) => {
     const done = gp.races.filter((r) => raceComplete(r, players.length)).length;
     const finished = gpFinished(gp, players.length);
+    const top = gpStandings(gp, players)[0];
     return h('a', {
-      class: 'card card-click', href: gpUrl(session, gp),
-      style: 'display:block;text-decoration:none', 'data-testid': 'card-gp-' + gp.id,
+      class: 'content-row card-click gp-line', href: gpUrl(session, gp),
+      style: 'text-decoration:none', 'data-testid': 'card-gp-' + gp.id,
     },
-      h('div', { class: 'spread' },
-        h('div', { style: 'min-width:0' },
-          h('div', { class: 'row' },
-            h('strong', {}, gp.gameIcon + '  ' + gp.gameName),
-            finished ? h('span', { class: 'badge badge-ok' }, 'Terminé') : h('span', { class: 'badge badge-primary' }, 'En cours')),
-          h('div', { class: 'sub' }, gp.races.length + ' courses · ' + done + ' saisies')),
-        h('span', { 'aria-hidden': 'true' }, '›')));
-  });
+      h('strong', {}, 'GP ' + (index + 1)),
+      h('span', { class: 'content-name sub' }, finished && top ? top.player.name + ' · ' + top.points + ' pts' : done + '/' + gp.races.length + ' courses'),
+      finished ? null : h('span', { class: 'badge badge-primary' }, 'En cours'),
+      h('span', { 'aria-hidden': 'true' }, '›'));
+  }).reverse();
 
   return h('div', { class: 'stack fade-in' },
     h('a', { class: 'back-link', href: '#/' }, '← Soirée'),
     h('div', {},
       h('h1', { class: 'page-title' }, session.name),
-      h('p', { class: 'sub' }, fmtDate(session.date) + ' · ' + players.map((p) => p.name).join(', '))),
+      h('p', { class: 'sub' }, players.map((p) => p.name).join(', '))),
     h('div', { class: 'card' },
       h('h2', { class: 'section-title' }, 'Classement de la soirée'),
       rankingList(session, players)),
@@ -251,7 +243,7 @@ export function SessionView(sessionId) {
     h('section', {},
       h('h2', { class: 'section-title' }, 'Grands Prix'),
       gpCards.length
-        ? h('div', { class: 'stack' }, gpCards)
+        ? h('div', { class: 'stack', style: 'gap:6px' }, gpCards)
         : h('p', { class: 'sub' }, 'Pas encore de Grand Prix.')));
 }
 
