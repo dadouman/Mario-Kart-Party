@@ -11,7 +11,7 @@ import { h, render, toast, modal, confirmModal, fmtDate, download, readFile, ava
 import { sessionRanking, allTimeStats } from './engine.js';
 import { NotFound, HomeView } from './views.js';
 import { DrawPrefsEditor, drawCourses, getDrawPrefs } from './draw.js';
-import { raceGame, gameStyle, gameBadge, timelineStep } from './race-visuals.js';
+import { raceGame, gameStyle, gameBadge, timelineStep, racersFor } from './race-visuals.js';
 import { APP_VERSION } from './updates.js';
 
 const S = () => getState();
@@ -112,11 +112,16 @@ function gameModal(game = null) {
   const st = S();
   const name = h('input', { class: 'input', type: 'text', value: game?.name || '', placeholder: 'Ex. : Mario Kart 64', 'data-testid': 'input-game-name' });
   const icon = h('input', { class: 'input', type: 'text', value: game?.icon || '', placeholder: '🏎️', maxlength: 4, style: 'max-width:90px' });
+  const currentRacers = game ? racersFor(game) : 12;
+  const racers = h('select', { class: 'input', 'data-testid': 'select-game-racers' },
+    [8, 12, 24].map((n) => h('option', { value: n, selected: n === currentRacers }, n + ' pilotes')));
   modal({
     title: game ? 'Modifier le jeu' : 'Nouveau jeu',
-    body: h('div', { class: 'row' },
-      h('label', { class: 'field', style: 'flex:1' }, h('span', { class: 'field-label' }, 'Nom du jeu'), name),
-      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Icône'), icon)),
+    body: h('div', { class: 'stack' },
+      h('div', { class: 'row' },
+        h('label', { class: 'field', style: 'flex:1' }, h('span', { class: 'field-label' }, 'Nom du jeu'), name),
+        h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Icône'), icon)),
+      h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'Pilotes par course'), racers)),
     actions: [
       { label: 'Annuler' },
       {
@@ -127,11 +132,12 @@ function gameModal(game = null) {
           if (game) {
             game.name = value;
             game.icon = icon.value.trim() || game.icon;
+            game.racers = Number(racers.value);
             save(); close(); render(GameView(game.id));
             return;
           }
           const created = {
-            id: newId('g'), name: value, icon: icon.value.trim() || '🏎️',
+            id: newId('g'), name: value, icon: icon.value.trim() || '🏎️', racers: Number(racers.value),
             archived: false, createdAt: Date.now(),
             editions: [{ id: newId('e'), name: 'Jeu de base', dlc: false, active: true, contents: [] }],
           };
@@ -278,7 +284,7 @@ export function GameView(gameId, { importing = false } = {}) {
     h('div', { class: 'page-head' },
       h('h1', { class: 'page-title' }, game.icon + '  ' + game.name),
       h('div', { class: 'row' },
-        h('button', { class: 'btn btn-ghost btn-sm', 'data-testid': 'button-edit-game', onclick: () => gameModal(game) }, 'Renommer'),
+        h('button', { class: 'btn btn-ghost btn-sm', 'data-testid': 'button-edit-game', onclick: () => gameModal(game) }, 'Modifier'),
         h('button', { class: 'btn btn-danger btn-sm', onclick: deleteGame }, 'Supprimer'))),
     h('div', { class: 'row' },
       h('a', { class: 'btn btn-primary', 'data-testid': 'button-import-contents', href: '#/jeux/' + gameId + '/import' }, 'Ajouter des circuits'),
@@ -595,6 +601,9 @@ export function ReglagesView() {
   const baremeBox = h('div', { class: 'pos-grid' });
   function refreshBareme() {
     baremeBox.innerHTML = '';
+    // Autant de places que le jeu qui compte le plus de pilotes (0 point par défaut).
+    const places = Math.max(st.settings.bareme.length, ...st.games.filter((g) => !g.archived).map(racersFor));
+    while (st.settings.bareme.length < places) st.settings.bareme.push(0);
     st.settings.bareme.forEach((val, i) => {
       baremeBox.append(h('label', { class: 'field', style: 'text-align:center' },
         h('span', { class: 'field-label' }, (i + 1) + (i === 0 ? 'er' : 'e')),

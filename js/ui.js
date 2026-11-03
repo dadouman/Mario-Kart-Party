@@ -40,11 +40,19 @@ export function render(view) {
 
 // ---------- Toasts ----------
 
-export function toast(msg, kind = '') {
+export function toast(msg, kind = '', { action = null, duration = 2600 } = {}) {
   const root = document.getElementById('toast-root');
   const t = h('div', { class: 'toast' + (kind ? ' toast-' + kind : ''), role: 'status' }, msg);
+  if (action) {
+    // Une seule action d'annulation à la fois.
+    root.querySelectorAll('.toast-action').forEach((old) => old.remove());
+    t.classList.add('toast-action');
+    t.append(h('button', { class: 'toast-btn', 'data-testid': 'toast-action',
+      onclick: () => { t.remove(); action.onClick(); } }, action.label));
+  }
   root.append(t);
-  setTimeout(() => t.remove(), 2600);
+  setTimeout(() => t.remove(), duration);
+  return t;
 }
 
 // ---------- Modales ----------

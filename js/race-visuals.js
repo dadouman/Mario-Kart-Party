@@ -54,3 +54,21 @@ export function timelineStep({ index, game, previousGame, card, state = '', labe
         label ? h('div', { class: 'timeline-label' }, label) : null,
         card)));
 }
+
+// Nom court affiché sur la pastille du jeu.
+export function gameShort(game) {
+  if (/mario kart.*8/i.test(game.name)) return 'MK8';
+  if (/mario kart.*world/i.test(game.name)) return 'World';
+  return game.name.split(/\s+/).map((word) => word[0]).slice(0, 4).join('').toUpperCase();
+}
+
+export function gamePill(game) {
+  return h('span', { class: 'game-pill', style: gameStyle(game), title: game.name }, gameShort(game));
+}
+
+// Nombre de pilotes d'une course : réglage du jeu, sinon 24 pour World, 12 ailleurs.
+export function racersFor(game) {
+  const saved = game && findGame(game.id);
+  if (saved?.racers) return saved.racers;
+  return /world/i.test(game?.name || '') ? 24 : 12;
+}

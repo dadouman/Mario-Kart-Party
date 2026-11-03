@@ -53,3 +53,35 @@ test('old special statuses still count as 0 point and complete the race', async 
   assert.equal(pointsFor({ status: 'forfeit' }, [15]), 0);
   assert.ok(raceComplete({ results: { a: { pos: 1 }, b: { status: 'abandon' } } }, 2));
 });
+
+const ps = ['a', 'b', 'c'].map((id) => ({ id, name: id.toUpperCase() }));
+const B = [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+test('race winners are the best real place, bots included', async () => {
+  const { raceWinners } = await engine;
+  assert.deepEqual(raceWinners({ results: { a: { pos: 5 }, b: { pos: 3 }, c: { pos: 9 } } }), ['b']);
+  assert.deepEqual(raceWinners({ results: {} }), []);
+});
+
+test('highlights name the race king, the comeback and the tightest race', async () => {
+  const { gpHighlights } = await engine;
+  const gp = { bareme: B, races: [
+    { contentName: 'R1', results: { a: { pos: 1 }, b: { pos: 2 }, c: { pos: 6 } } },
+    { contentName: 'R2', results: { a: { pos: 7 }, b: { pos: 3 }, c: { pos: 1 } } },
+    { contentName: 'R3', results: { a: { pos: 8 }, b: { pos: 4 }, c: { pos: 1 } } },
+  ] };
+  const facts = Object.fromEntries(gpHighlights(gp, ps).map((f) => [f.key, f.text]));
+  assert.match(facts.wins, /^C · 2 courses/);
+  assert.match(facts.comeback, /^C · 3e → 1er/);
+  assert.match(facts.tight, /^R1 · A devant B d’une place/);
+});
+
+test('session ranking delta compares with the ranking before the GP', async () => {
+  const { sessionRankingDelta } = await engine;
+  const session = { playerIds: ['a', 'b'], grandPrix: [
+    { id: 'g1', bareme: B, races: [{ results: { a: { pos: 1 }, b: { pos: 2 } } }] },
+    { id: 'g2', bareme: B, races: [{ results: { a: { pos: 12 }, b: { pos: 1 } } }] },
+  ] };
+  assert.deepEqual(sessionRankingDelta(session, 'g1').map((r) => [r.pid, r.delta]), [['a', 0], ['b', 0]]);
+  assert.deepEqual(sessionRankingDelta(session, 'g2').map((r) => [r.pid, r.rank, r.delta]), [['b', 1, 1], ['a', 2, -1]]);
+});
