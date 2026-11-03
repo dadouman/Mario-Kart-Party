@@ -200,7 +200,10 @@ export function gpHighlights(gp, players) {
   const maxWins = Math.max(0, ...Object.values(wins));
   if (maxWins > 0) {
     const kings = Object.keys(wins).filter((pid) => wins[pid] === maxWins);
+    const kingNames = kings.map(name);
     facts.push({ key: 'wins', title: 'Roi des courses',
+      who: kingNames.length > 2 ? kingNames[0] + ' +' + (kingNames.length - 1) : kingNames.join(' & '),
+      short: maxWins + ' victoire' + (maxWins > 1 ? 's' : ''),
       text: kings.map(name).join(' et ') + ' · ' + maxWins + ' course' + (maxWins > 1 ? 's' : '') + ' remportée' + (maxWins > 1 ? 's' : '') });
   }
 
@@ -213,6 +216,7 @@ export function gpHighlights(gp, players) {
       if (gain > 0 && (!best || gain > best.gain)) best = { pid: r.player.id, gain, from: afterFirst[r.player.id], to: r.rank };
     });
     if (best) facts.push({ key: 'comeback', title: 'Meilleure remontée',
+      who: name(best.pid), short: 'remonte ' + ordinal(best.from) + ' → ' + ordinal(best.to),
       text: name(best.pid) + ' · ' + ordinal(best.from) + ' → ' + ordinal(best.to) });
   }
 
@@ -225,6 +229,7 @@ export function gpHighlights(gp, players) {
       if (!tight || gap < tight.gap) tight = { race: r, gap, a: ranked[0][0], b: ranked[1][0] };
     });
     if (tight) facts.push({ key: 'tight', title: 'Course la plus serrée',
+      who: tight.race.contentName, short: name(tight.a) + ' devant ' + name(tight.b),
       text: tight.race.contentName + ' · ' + name(tight.a) + ' devant ' + name(tight.b) +
         (tight.gap <= 1 ? ' d’une place' : ' de ' + tight.gap + ' places') });
   }

@@ -27,7 +27,7 @@
 - **Grille des places** : on touche une place (1 à 12, ou 24 pour Mario Kart World) puis le joueur ; les cases vides sont les bots. La course s'enregistre seule quand tout le monde est placé, avec « Annuler » quelques secondes.
 - **Récap de fin de GP** : podium animé, faits marquants (roi des courses, meilleure remontée, course la plus serrée) et classement de la soirée avec les places gagnées ou perdues.
 - **Noms de Grand Prix** : chaque GP reçoit un nom tiré au sort (« Coupe des Carapaces Rancunières », « Open de Minuit », « Trophée Anti-Pauline » contre le vainqueur précédent…), à relancer d’une touche.
-- **Partage du résultat** : une carte au format story (podium, faits marquants, lanterne rouge) et un message prêt à envoyer dans un groupe, qui raconte le GP avec un peu de chambrage.
+- **Partage du résultat** : une carte au format story (classement, courses jouées avec leur vainqueur, faits marquants) et un message prêt à envoyer dans un groupe, qui raconte le GP avec un peu de chambrage.
 - **Pas de validation** : chaque course saisie compte immédiatement au classement et reste modifiable.
 - **Tirage express** : juste une grille de circuits, sans scores ; chaque circuit se relance individuellement.
 - **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV depuis les Réglages.
