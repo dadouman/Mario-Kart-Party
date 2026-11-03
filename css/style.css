@@ -880,3 +880,17 @@ details.accord > summary::-webkit-details-marker { display: none; }
 details.accord > summary::after { content: "+"; color: var(--text-muted); font-size: 1.1rem; }
 details.accord[open] > summary::after { content: "–"; }
 details.accord > .accord-body { padding: 0 14px 14px; }
+
+/* ---------- Parcours essentiel ---------- */
+[hidden] { display: none !important; }
+.draw-prefs { padding: 0; }
+.draw-prefs > summary { list-style: none; cursor: pointer; padding: 14px 16px; gap: 12px; }
+.draw-prefs > summary::-webkit-details-marker { display: none; }
+.draw-prefs > summary::after { content: '⌄'; color: var(--text-muted); }
+.draw-prefs[open] > summary::after { transform: rotate(180deg); }
+.draw-prefs > summary .draw-config-summary { flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.draw-prefs > .stack { padding: 0 16px 16px; }
+.sub.is-error { color: var(--danger); }
+.gp-completion { margin-top: var(--space-4, 16px); border-color: var(--primary); }
+/* Le conteneur reçoit le focus à chaque changement de page : pas de contour. */
+.app-main:focus, .app-main:focus-visible { outline: none; }

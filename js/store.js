@@ -4,7 +4,7 @@
 // (aperçu en iframe sandboxée) avec bandeau d'avertissement.
 // ============================================================
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const KEY = 'mkp-data';
 
 let persistent = true;
@@ -70,8 +70,7 @@ const MK8D_DLC = [
   '3DS Koopapolis', 'GBA Route Ruban', 'Métro Turbo', 'Big Blue',
 ];
 
-const mkContents = (names, status, source) =>
-  names.map((n) => ({ id: uid('c'), name: n, tags: [], status, active: true, source }));
+const mkContents = (names) => names.map((n) => ({ id: uid('c'), name: n, active: true }));
 
 function seedData() {
   return {
@@ -87,9 +86,6 @@ function seedData() {
         id: uid('g'),
         name: 'Mario Kart World',
         icon: '🌍',
-        platform: 'Nintendo Switch 2',
-        genre: 'Course',
-        contentType: 'Circuit',
         archived: false,
         createdAt: Date.now(),
         editions: [
@@ -98,14 +94,14 @@ function seedData() {
             name: 'Jeu de base',
             dlc: false,
             active: true,
-            contents: mkContents(MKW_COURSES, 'verified', 'Guide ActuGaming (juin 2025)'),
+            contents: mkContents(MKW_COURSES),
           },
           {
             id: uid('e'),
             name: 'Mise à jour 1.8.0 — circuits rétro',
             dlc: false,
             active: true,
-            contents: mkContents(MKW_RETRO_180, 'unverified', 'Mise à jour 1.8.0 (RetroGems, sept. 2026)'),
+            contents: mkContents(MKW_RETRO_180),
           },
         ],
       },
@@ -113,9 +109,6 @@ function seedData() {
         id: uid('g'),
         name: 'Mario Kart 8 Deluxe',
         icon: '🏁',
-        platform: 'Nintendo Switch',
-        genre: 'Course',
-        contentType: 'Circuit',
         archived: false,
         createdAt: Date.now(),
         editions: [
@@ -124,14 +117,14 @@ function seedData() {
             name: 'Jeu de base',
             dlc: false,
             active: true,
-            contents: mkContents(MK8D_BASE, 'verified', 'jeuxvideo.com'),
+            contents: mkContents(MK8D_BASE),
           },
           {
             id: uid('e'),
             name: 'Pass circuits additionnels',
             dlc: true,
             active: true,
-            contents: mkContents(MK8D_DLC, 'verified', 'jeuxvideo.com'),
+            contents: mkContents(MK8D_DLC),
           },
         ],
       },
@@ -142,10 +135,38 @@ function seedData() {
 
 // ---------- Chargement / sauvegarde ----------
 
-function migrate(raw) {
-  // Migration future : version par version.
-  if (raw && raw.version === SCHEMA_VERSION) return raw;
-  return raw; // version 1 pour l'instant
+// v1 -> v2 : modèle essentiel. Plus de statut de vérification, de source,
+// de plateforme/genre, de statut de session ni d'historique de tirages.
+// Les GP validés gardent leurs résultats ; les points sont recalculés en direct.
+function migrateV1(data) {
+  for (const game of data.games || []) {
+    delete game.platform; delete game.genre; delete game.contentType;
+    for (const ed of game.editions || []) {
+      for (const c of ed.contents || []) {
+        if (c.status === 'archived') { c.archived = true; c.active = false; }
+        delete c.status; delete c.source; delete c.tags;
+      }
+    }
+  }
+  for (const session of data.sessions || []) {
+    delete session.status; delete session.draws;
+    for (const gp of session.grandPrix || []) {
+      delete gp.validated; delete gp.validatedAt; delete gp.points; delete gp.history;
+    }
+  }
+  delete data.draws;
+  if (data.settings?.drawPreferences) {
+    delete data.settings.drawPreferences.unique;
+    delete data.settings.drawPreferences.excludeRecent;
+  }
+  data.version = 2;
+  return data;
+}
+
+export function migrate(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  if (!raw.version || raw.version < 2) raw = migrateV1(raw);
+  return raw;
 }
 
 let state;
@@ -250,8 +271,7 @@ export function findSession(id) {
 }
 
 export function lastSession() {
-  const open = state.sessions.filter((s) => s.status === 'open');
-  return open[open.length - 1] || state.sessions[state.sessions.length - 1] || null;
+  return state.sessions[state.sessions.length - 1] || null;
 }
 
 export function getPlayers(ids) {

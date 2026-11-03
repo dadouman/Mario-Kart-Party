@@ -1,228 +1,111 @@
 # 🏎️ Mario Kart Party
 
-**PWA locale pour animer vos soirées Mario Kart** : tirages aléatoires de circuits, Grands Prix, saisie des scores, classements et export des données. Tout fonctionne **hors ligne**, **sans compte** et **sans serveur** — vos données restent sur votre appareil.
+**PWA locale pour animer vos soirées Mario Kart** : on lance la soirée, les circuits sont tirés au sort, on saisit les places, le classement suit en direct. Tout fonctionne **hors ligne**, **sans compte** et **sans serveur** — vos données restent sur votre appareil.
 
 <p align="center">
-  <img src="docs/screenshots/02-tirage.jpg" width="260" alt="Tirage au sort" />
-  <img src="docs/screenshots/04-saisie-course.jpg" width="260" alt="Saisie d'une course" />
-  <img src="docs/screenshots/05-gp-valide.jpg" width="260" alt="Grand Prix validé" />
+  <img src="docs/screenshots/01-soiree.jpg" width="260" alt="Lancer une soirée" />
+  <img src="docs/screenshots/02-grand-prix.jpg" width="260" alt="Saisie sur la chronologie du Grand Prix" />
+  <img src="docs/screenshots/03-gp-termine.jpg" width="260" alt="Grand Prix terminé" />
 </p>
 
 ## Sommaire
 
 - [Fonctionnalités](#fonctionnalités)
 - [Démarrage rapide](#démarrage-rapide)
-- [Guide d'utilisation](#guide-dutilisation)
-- [Le catalogue de jeux](#le-catalogue-de-jeux)
+- [Déroulé d'une soirée](#déroulé-dune-soirée)
+- [Jeux et circuits](#jeux-et-circuits)
 - [Vos données](#vos-données)
 - [Héberger l'application](#héberger-lapplication)
-- [Structure du projet](#structure-du-projet)
-- [Sources des listes de circuits](#sources-des-listes-de-circuits)
-- [Licence et avertissement](#licence-et-avertissement)
+- [Développement](#développement)
 
 ## Fonctionnalités
 
-- **Soirées (sessions)** : créez une soirée, ajoutez vos joueurs (conservés d'une soirée à l'autre), lancez autant de Grands Prix que vous voulez.
-- **Tirages aléatoires** :
-  - un **ou plusieurs jeux mélangés** (ex. Mario Kart World + Mario Kart 8 Deluxe) ;
-  - filtres par édition/extension et par statut de vérification ;
-  - **sans doublon** (option), **verrouillage** de circuits favoris et re-tirage du reste ;
-  - exclusion des circuits déjà joués (5 derniers tirages) ;
-  - historique des tirages.
-- **Grand Prix** : 4 courses par défaut (configurable), tirées au sort ou reprises d'un tirage rapide.
-- **Saisie des courses** :
-  - directement sous la course ouverte dans la chronologie du Grand Prix, sans changer de page ;
-  - un **champ numérique par joueur** pour saisir sa place réelle, bots compris, et des points calculés automatiquement ;
-  - statuts spéciaux via « N’a pas terminé » : Abandon, Absent, Forfait (0 point) ;
-  - détection des conflits (deux joueurs sur la même place) avant validation.
-- **Barème modifiable** : 15/12/10/9/8/7/6/5/4/3/2/1 par défaut, éditable dans les réglages.
-- **Validation et corrections** : un GP validé verrouille la saisie ; une correction reste possible et est **tracée dans un journal d'audit** (qui a modifié quoi et quand).
-- **Classements** : par soirée et toutes soirées confondues (points, victoires, podiums), export **CSV**.
-- **Catalogue administrable** : jeux, éditions, circuits — rien n'est figé, tout s'ajoute, se modifie, se désactive ou s'archive ; statut de vérification par contenu (Vérifié / À vérifier).
-- **Export / import JSON** : sauvegarde et restauration complètes de toutes vos données.
-- **PWA installable** : thème clair/sombre, pensée mobile d'abord, fonctionne hors ligne.
+- **Trois onglets** : Soirée, Classement, Réglages.
+- **Soirée en un clic** : les joueurs de la soirée précédente sont présélectionnés, le premier Grand Prix est tiré au sort et démarre tout de suite.
+- **Tirage automatique** : jamais deux fois le même circuit dans un GP ; les circuits joués récemment deviennent moins probables, sans être interdits. Un ou plusieurs jeux, éditions et DLC au choix, 2 à 8 courses.
+- **Saisie sur la chronologie** : la place réelle de chaque joueur (bots compris), les points s'affichent en direct, le podium reste visible. « Changer de circuit » tant qu'une course n'est pas jouée.
+- **Pas de validation** : chaque course saisie compte immédiatement au classement et reste modifiable.
+- **Tirage express** : juste une grille de circuits, sans scores (Garder / Changer / Relancer).
+- **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV.
+- **Hors ligne, sans compte, sans serveur** ; export / import JSON.
 
 ## Démarrage rapide
 
-### Utiliser directement
-
-Ouvrez simplement `index.html` dans un navigateur — aucune installation, aucun build, aucune dépendance.
-
-> **Note** : pour installer la PWA (et l'utiliser hors ligne sur mobile), servez le dossier via HTTPS. Voir [Héberger l'application](#héberger-lapplication).
-
-### Mises à jour de l'application
-
-Le numéro installé apparaît dans **Réglages → Application**. Chaque publication
-télécharge tous les fichiers avec un identifiant de version distinct pour ne
-pas recycler d'anciens fichiers du cache HTTP. Le nouveau service worker ne
-s'active que lorsque l'ensemble est prêt ; la page sauvegarde les saisies en
-attente avant de se recharger. Les sessions, scores, circuits et réglages ne
-sont pas effacés.
-
-La sauvegarde ne réécrit rien si cet onglet n'a aucune modification en attente.
-Si un autre onglet a enregistré une version plus récente, l'écriture est
-bloquée : exportez le brouillon proposé avant de recharger la sauvegarde
-récente. Une copie de l'état précédent est conservée avant chaque écriture
-si l'espace local le permet, et peut être exportée depuis les réglages.
-
-**Migration vers 2026.11.02.2 :** fermez tous les onglets/fenêtres Mario Kart
-Party puis rouvrez l'application. Le worker attend volontairement la fermeture
-des anciennes versions pour éviter leur réécriture de données au rechargement.
-Les mises à jour entre versions sécurisées suivantes restent automatiques.
-
-### Parcours simplifié
-
-Depuis la version `2026.11.02.3`, la création d'une session conduit directement
-à la préparation du Grand Prix. Cette page réutilise le tirage rapide : choix
-des jeux, filtres d'éditions/DLC mémorisés, aperçu, verrouillage et remplacement
-des courses, puis lancement de la grille affichée dans la bonne session.
-L'accueil et la session proposent une reprise directe du Grand Prix en cours.
-
-Le classement complet se déplie dans le panneau du podium, sans fenêtre
-superposée. La validation du Grand Prix se fait en un clic et reste corrigeable ;
-les actions pour préparer le suivant ou consulter la soirée sont alors visibles.
-
-L'import de circuits dispose d'une page dédiée, avec liste/fichier/recherche IA
-d'un côté et aperçu à contrôler de l'autre sur ordinateur. Sur mobile, ces blocs
-se suivent. Le statut et la source sont des options secondaires ; les circuits
-ne sont ajoutés qu'après le clic sur Importer.
-
-Les fenêtres courtes restent utilisées pour les formulaires ponctuels et les
-confirmations sensibles. Elles disposent d'une fermeture explicite, d'une
-navigation clavier confinée à la fenêtre et d'actions séparées du contenu
-défilant. Un clic hors de la fenêtre ne ferme plus un formulaire par accident.
-
-Si vous venez d'une ancienne version qui n'avait pas encore ce mécanisme,
-rechargez normalement la page après la mise à jour. Ne videz pas les données du
-site et n'utilisez pas « Réinitialiser toutes les données » pour mettre à jour.
-Pour publier une nouvelle version, synchronisez `VERSION` dans `sw.js`,
-`APP_VERSION` dans `js/updates.js` et les paramètres `v` de `index.html`.
-
-Tests de non-régression du cache et de la sauvegarde avant mise à jour :
-`node --test tests/*.test.cjs` (Node.js 18 ou supérieur, sans dépendance).
-
-### En local avec un serveur
+Ouvrez `index.html` dans un navigateur — aucune installation, aucun build, aucune dépendance.
+Pour installer la PWA, servez le dossier en HTTPS (ou en local) :
 
 ```bash
-# au choix
 python3 -m http.server 3000
-npx serve . -l 3000
 ```
 
-Puis ouvrez http://localhost:3000 et installez l'application depuis le menu du navigateur (« Installer l'application » / « Sur l'écran d'accueil »).
+## Déroulé d'une soirée
 
-## Guide d'utilisation
+1. **Soirée → Lancer une soirée** : ajustez les joueurs (2 à 12) et, si besoin, « Jeux et courses ».
+2. **Lancer la soirée** : le Grand Prix s'ouvre sur la première course.
+3. **Saisissez les places** sous la course ouverte, puis « Enregistrer et passer à la suivante ».
+4. **Grand Prix terminé** → « Grand Prix suivant » tire une nouvelle grille avec les mêmes réglages.
 
-### Tirage rapide
+La soirée la plus récente est affichée sur l'accueil avec son classement ; les précédentes restent consultables.
 
-Choisissez vos jeux et un format de 2, 4, 6 ou 8 courses (ou un nombre
-personnalisé). Le volet **Éditions, DLC et options** permet de choisir le jeu
-de base uniquement, d'inclure toutes les éditions actives, et de régler les
-doublons et l'exclusion des cinq derniers tirages. Ces préférences sont
-mémorisées sur l'appareil.
+## Jeux et circuits
 
-Après le tirage, les réglages se replient. Utilisez **Garder** pour protéger
-une course à sa position, **Changer** pour remplacer une seule course, ou
-**Relancer les courses libres** pour refaire le reste. Un changement de
-filtres efface les résultats précédents pour éviter de lancer un GP avec
-une sélection périmée. Choisissez votre soirée dans le sélecteur, puis
-**Lancer le Grand Prix**, ou créez une nouvelle session avec ces courses.
+**Réglages → Jeux et circuits** : ajoutez un jeu (nom et icône), des éditions (jeu de base, DLC) et des circuits.
+L'interrupteur d'un circuit l'exclut des tirages sans le supprimer. Un circuit déjà joué et supprimé disparaît
+du catalogue sans modifier les anciens résultats.
 
-Chaque jeu dispose d'un badge nominatif et d'une couleur cohérente. Les courses
-sont reliées dans une chronologie numérotée, du départ à l'arrivée, avec un repère
-à chaque changement de jeu. L'écran du Grand Prix affiche la progression des
-saisies et ouvre automatiquement la première course incomplète. Cliquez sur une
-course pour déplier ses champs de score juste dessous : une seule course est
-ouverte à la fois, sans navigation vers une autre page. Les autres courses
-restent accessibles pour la saisie ou une correction et les points provisoires
-se mettent à jour en direct. Les anciens liens vers une course restent compatibles.
+**Ajouter des circuits** : collez une liste (un circuit par ligne). Une ligne `== Nom ==` crée ou remplit
+une édition, la numérotation est retirée automatiquement. Un fichier txt / csv / json ou une liste préparée
+par IA sont proposés en options. Vérifiez l'aperçu, retirez les erreurs, puis Importer.
 
-Le **podium du Grand Prix reste visible pendant le défilement** : colonne fixe
-à droite sur ordinateur, bandeau compact en haut sur téléphone et tablette.
-Les marches montrent les trois premiers joueurs et leurs points en direct.
-Les ex æquo partagent le même rang ; avant la première saisie, tous partent à
-égalité. Le bouton **Tout voir** ouvre le classement de tous les participants.
-Les repères numérotés sous le podium permettent d'ouvrir directement une course,
-avec la couleur du jeu et un état distinct pour les courses saisies ou ouvertes.
-La feuille de scores reste sur la même page, sans perte de focus à chaque frappe.
-
-1. **Créez une soirée** — Accueil → « Nouvelle session » → ajoutez au moins 2 joueurs (12 maximum).
-2. **Tirez les courses** :
-   - depuis la soirée : « Nouveau Grand Prix » — cochez un ou plusieurs jeux, choisissez les éditions, le nombre de courses, puis « Tirer les courses » ;
-   - ou depuis l'onglet « Tirage » : tirez, verrouillez vos circuits préférés, relancez le reste, puis « Lancer un Grand Prix » ou « Créer une session avec ce tirage ».
-3. **Saisissez chaque course sur la même page** — dans la chronologie, tapez la place réelle de chaque joueur sous la course ouverte. Les points s'affichent en direct ; une place au-delà du barème vaut 0 point. Les doublons et les valeurs invalides sont signalés. Utilisez « N’a pas terminé » pour les cas particuliers, puis « Enregistrer et passer à la suivante » : la prochaine course incomplète se déplie sur place. Après la dernière course, « Enregistrer et terminer la saisie » vous amène au bouton de validation, toujours sur la même page. Les saisies partielles sont sauvegardées automatiquement ; le bouton d'enregistrement écrit immédiatement la sauvegarde avant de passer à la suite.
-4. **Validez le Grand Prix** — une fois les 4 courses complètes et sans conflit, « Valider le Grand Prix » ajoute les points au classement de la soirée.
-5. **Corrigez si besoin** — « Modifier » sur le GP validé : chaque changement est horodaté dans l'historique d'audit.
-6. **Consultez les classements** — onglet « Classement » : par soirée ou toutes soirées, export CSV possible.
-
-## Le catalogue de jeux
-
-### Nettoyer un import
-
-Avant de valider l'import, utilisez **Retirer** dans l'aperçu pour écarter
-chaque circuit incorrect. La liste et les compteurs sont mis à jour immédiatement.
-
-Après import, ouvrez **Jeux → votre jeu → édition → Supprimer des circuits**.
-Recherchez puis cochez les éléments à retirer, ou utilisez **Tout sélectionner
-(filtre)**. Cliquez sur **Supprimer la sélection**, puis confirmez.
-Les circuits jamais utilisés sont supprimés ; ceux présents dans un Grand Prix
-sont archivés et exclus des prochains tirages, sans modifier les anciens résultats.
-Vous pouvez annuler avant confirmation et vos choix sont conservés localement
-après validation.
-
-Le catalogue préchargé contient :
-
-| Jeu | Contenus | Statut |
-|---|---|---|
-| Mario Kart World | 32 circuits (jeu de base) + 10 circuits rétro (mise à jour 1.8.0) | Base vérifiée · rétro **à vérifier** |
-| Mario Kart 8 Deluxe | 32 circuits (jeu de base) + 16 circuits (Pass circuits) | Vérifié |
-
-Tout est administrable dans l'onglet « Jeux » : ajoutez vos propres jeux/éditions/circuits, marquez les noms à vérifier, désactivez temporairement un circuit qui ne plaît pas à la table.
+| Jeu | Contenus préchargés |
+|---|---|
+| Mario Kart World | 32 circuits + 10 circuits rétro (mise à jour 1.8.0) |
+| Mario Kart 8 Deluxe | 32 circuits + 16 circuits (Pass circuits) |
 
 ## Vos données
 
-- Stockage **100 % local** (`localStorage` du navigateur) — aucun compte, aucun serveur, aucune donnée envoyée.
-- **Export JSON** (Réglages) pour sauvegarder ou changer d'appareil ; **import JSON** pour restaurer.
-- Environnements restreints (iframe d'aperçu) : l'application bascule en mémoire volatile et l'indique par un bandeau.
+- Stockage **100 % local** (`localStorage`) ; exportez une sauvegarde JSON depuis les Réglages.
+- Les données des versions précédentes sont migrées automatiquement (schéma v2) : résultats conservés,
+  anciens statuts « Abandon / Absent / Forfait » comptés 0 point.
+- Si un autre onglet a enregistré des données plus récentes, l'écriture est bloquée et un export du brouillon est proposé.
 
 ## Héberger l'application
 
-N'importe quel hébergement statique convient (GitHub Pages, Netlify, Vercel, un simple dossier sur un serveur web…). Le repo inclut un workflow GitHub Actions (`.github/workflows/pages.yml`) :
+N'importe quel hébergement statique convient. Le workflow `.github/workflows/pages.yml` déploie sur
+GitHub Pages à chaque push sur `master` (Settings → Pages → Source : GitHub Actions).
 
-1. Sur GitHub : **Settings → Pages → Build and deployment → Source : GitHub Actions**.
-2. Poussez sur `master` — le site est déployé sur `https://<user>.github.io/Mario-Kart-Party/`.
-
-Tous les chemins de l'application sont relatifs : elle fonctionne aussi bien à la racine d'un domaine que dans un sous-dossier.
-
-## Structure du projet
+## Développement
 
 ```
-├── index.html            # Coquille de l'application (tabbar, header, thème)
-├── manifest.webmanifest  # Manifeste PWA
-├── sw.js                 # Service worker (cache hors ligne)
-├── css/style.css         # Design system (thème nuit/circuit)
+├── index.html            # Coquille (en-tête, 3 onglets)
+├── sw.js                 # Service worker (cache hors ligne versionné)
+├── css/style.css
 ├── js/
-│   ├── app.js            # Routeur par hash, thème, enregistrement du SW
-│   ├── store.js          # Persistance localStorage + catalogue préchargé
-│   ├── engine.js         # Tirage aléatoire, barème, calculs de points
-│   ├── ui.js             # Composants UI (h(), modal, toast…)
-│   ├── views.js          # Accueil, session, GP, saisie des courses
-│   ├── views-admin.js    # Tirage, bibliothèque, classement, réglages
-│   └── pending.js        # Passation d'un tirage vers une session
-├── icons/                # Icônes PWA (192, 512, maskable)
-└── docs/screenshots/     # Captures d'écran du README
+│   ├── app.js            # Routeur par hash, thème
+│   ├── store.js          # Persistance locale, catalogue préchargé, migrations
+│   ├── engine.js         # Tirage pondéré, barème, classements (pur, testé)
+│   ├── draw.js           # Préférences de tirage, création d'un GP
+│   ├── views.js          # Soirée, Grand Prix, saisie
+│   ├── views-admin.js    # Tirage express, jeux, classement, réglages
+│   ├── race-visuals.js   # Badges et chronologie
+│   ├── updates.js        # Version et mise à jour PWA
+│   └── ui.js             # h(), modales, toasts
+├── scripts/version.mjs   # Numéro de version unique
+└── tests/                # node --test tests/
 ```
 
-Aucune dépendance, aucun build : JavaScript natif (ES modules) et CSS.
+- Tests : `node --test tests/` (Node.js 18+, sans dépendance).
+- Publier une version : `node scripts/version.mjs AAAA.MM.JJ.N` met à jour `sw.js`, `js/updates.js`
+  et `index.html` ; sans argument, le script vérifie que les trois sont cohérents.
 
 ## Sources des listes de circuits
 
 - **Mario Kart World** (lancement) : [guide ActuGaming](https://www.actugaming.net/guide-circuits-mario-kart-world-730586/)
-- **Mario Kart World 1.8.0** (10 circuits rétro) : [RetroGems](https://retrogems.fr/mario-kart-world-mise-a-jour/) — marqués « à vérifier » dans l'app
+- **Mario Kart World 1.8.0** (10 circuits rétro) : [RetroGems](https://retrogems.fr/mario-kart-world-mise-a-jour/)
 - **Mario Kart 8 Deluxe** (48 circuits) : [jeuxvideo.com](https://www.jeuxvideo.com/wikis-soluce-astuces/999277/tous-les-circuits-de-mario-kart-8-deluxe-raccourcis-et-astuces.htm)
 
 ## Licence et avertissement
 
 Code sous licence [MIT](LICENSE) — © 2026 Jocelyn Sabatini.
 
-> **Avertissement** : ce projet est un outil communautaire sans lien avec Nintendo. Mario Kart et les noms de circuits sont des marques de Nintendo ; les listes de circuits sont fournies à titre informatif et peuvent contenir des erreurs — d'où les statuts de vérification dans l'application.
+> **Avertissement** : ce projet est un outil communautaire sans lien avec Nintendo. Mario Kart et les noms de circuits sont des marques de Nintendo ; les listes de circuits sont fournies à titre informatif et peuvent contenir des erreurs ; elles restent modifiables dans l'application.
