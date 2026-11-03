@@ -82,9 +82,9 @@ export const ICONS = {
 export const icon = (name) => h('span', { class: 'gp-icon', 'aria-hidden': 'true', html: ICONS[name] });
 
 // Bouton « changer de circuit » (icône de relance).
-export function rerollButton(onClick, testid) {
+export function rerollButton(onClick, testid, label = 'Changer de circuit') {
   return h('button', {
-    class: 'gp-reroll', 'aria-label': 'Changer de circuit', title: 'Changer de circuit',
+    class: 'gp-reroll', 'aria-label': label, title: label,
     'data-testid': testid, onclick: onClick,
   }, icon('reroll'));
 }

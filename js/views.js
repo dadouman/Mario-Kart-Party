@@ -11,6 +11,7 @@ import {
 } from './ui.js';
 import {
   raceComplete, gpFinished, sessionRanking, gpStandings,
+  gpTitle,
 } from './engine.js';
 import { DrawPrefsEditor, startGrandPrix } from './draw.js';
 import { gpUrl, launchGp, GpView, RaceView } from './gp.js';
@@ -218,7 +219,8 @@ export function SessionView(sessionId) {
       class: 'content-row card-click gp-line', href: gpUrl(session, gp),
       style: 'text-decoration:none', 'data-testid': 'card-gp-' + gp.id,
     },
-      h('strong', {}, 'GP ' + (index + 1)),
+      h('span', { class: 'gp-line-num' }, String(index + 1)),
+      h('strong', { class: 'gp-line-name' }, gpTitle(session, gp)),
       h('span', { class: 'content-name sub' }, finished && top ? top.player.name + ' · ' + top.points + ' pts' : done + '/' + gp.races.length + ' courses'),
       finished ? null : h('span', { class: 'badge badge-primary' }, 'En cours'),
       h('span', { 'aria-hidden': 'true' }, '›'));

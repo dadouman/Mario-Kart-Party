@@ -7,9 +7,9 @@ import { getState, save, flushSave, findSession, getPlayers } from './store.js';
 import { h, toast, confirmModal, avatarEl, moreMenu } from './ui.js';
 import {
   raceComplete, gpStandings, gpFinished, pointsFor, raceWinners,
-  sessionRankingDelta, gpHighlights, ordinal,
+  sessionRankingDelta, gpHighlights, ordinal, gpTitle,
 } from './engine.js';
-import { startGrandPrix, replaceRace } from './draw.js';
+import { startGrandPrix, replaceRace, renameGp } from './draw.js';
 import { raceGame, gameStyle, gamePill, racersFor, icon, rerollButton } from './race-visuals.js';
 import { NotFound } from './views.js';
 import { openShare, SHARE_ICON } from './share.js';
@@ -60,7 +60,14 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   const header = h('header', { class: 'gp-head' },
     h('a', { class: 'back-link', href: '#/session/' + sessionId }, '← ' + session.name),
     h('div', { class: 'gp-head-row' },
-      h('h1', { class: 'page-title' }, 'Grand Prix ' + gpNumber),
+      h('div', { class: 'gp-title-wrap' },
+        h('span', { class: 'gp-num' }, 'GP ' + gpNumber),
+        h('h1', { class: 'page-title gp-name', 'data-testid': 'gp-name' }, gpTitle(session, gp))),
+      rerollButton(() => {
+        renameGp(session, gp);
+        header.querySelector('.gp-name').textContent = gpTitle(session, gp);
+        renderRecap();
+      }, 'button-rename-gp', 'Changer de nom'),
       menu));
 
   const bar = h('div', { class: 'gp-bar', 'data-testid': 'gp-live-ranking', 'aria-label': 'Classement du Grand Prix' });
@@ -281,7 +288,8 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
     const showDelta = gpNumber > 1;
 
     recapBox.replaceChildren(h('section', { class: 'gp-recap', 'data-testid': 'gp-completion', 'aria-label': 'Récap du Grand Prix' },
-      h('h2', { class: 'recap-title' }, 'Grand Prix ' + gpNumber + ' terminé'),
+      h('p', { class: 'recap-kicker' }, 'GP ' + gpNumber + ' terminé'),
+      h('h2', { class: 'recap-title' }, gpTitle(session, gp)),
       podium,
       rest.length ? h('ol', { class: 'recap-rest' }, rest.map((row) => h('li', {},
         h('span', { class: 'rank-pos' }, String(row.rank)), avatarEl(row.player, 22),

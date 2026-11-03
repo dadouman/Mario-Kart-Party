@@ -108,3 +108,23 @@ test('share story tells the GP with a fun headline and the session lead', async 
   const tie = gpStory({ playerIds: ['a', 'b'], grandPrix: [{ id: 't', bareme: B, races: [] }] }, { id: 't', bareme: B, races: [] }, ps.slice(0, 2));
   assert.ok(tie.kicker);
 });
+
+test('GP names are fun, avoid repeats and use the evening context', async () => {
+  const { gpName, gpNameContext, gpTitle, gpStory } = await engine;
+  const used = [];
+  for (let i = 0; i < 40; i++) {
+    const n = gpName(Math.random, { used, gpNumber: i + 1, hour: 21 });
+    assert.ok(!used.includes(n) && n.split(' ').length >= 2);
+    used.push(n);
+  }
+  let x = 0; const low = () => (x++ % 2 ? 0.5 : 0.01);
+  assert.match(gpName(low, { lastWinner: 'Alex', gpNumber: 2 }), / Anti-Alex$/);
+  const gp1 = { id: 'g1', bareme: B, races: [{ results: { a: { pos: 1 }, b: { pos: 2 }, c: { pos: 3 } } }] };
+  const session = { playerIds: ['a', 'b', 'c'], grandPrix: [gp1] };
+  const ctx = gpNameContext(session, ps, null, new Date(2026, 0, 1, 23, 30));
+  assert.deepEqual([ctx.gpNumber, ctx.hour, ctx.lastWinner], [2, 23, 'A']);
+  assert.equal(gpTitle(session, gp1), 'Grand Prix 1');
+  gp1.name = 'Coupe du Canapé';
+  assert.equal(gpTitle(session, gp1), 'Coupe du Canapé');
+  assert.match(gpStory(session, gp1, ps).headline, /^Coupe du Canapé : /);
+});

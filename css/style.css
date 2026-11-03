@@ -870,3 +870,15 @@ details.accord > .accord-body { padding: 0 14px 14px; }
 .share-preview { width: auto; max-width: 100%; max-height: 52vh; aspect-ratio: 9 / 16; border-radius: 16px; box-shadow: var(--shadow-sm); background: #1a1524; }
 .share-text { width: 100%; margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); font-size: .86rem; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
 .modal-actions:has([data-testid=button-copy-share]) { flex-wrap: wrap; }
+
+/* ---------- Noms de Grand Prix ---------- */
+.gp-head-row { align-items: flex-end; }
+.gp-title-wrap { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.gp-num, .recap-kicker { font-size: .72rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.gp-name { margin: 0; font-size: clamp(1.35rem, 1.1rem + 1.4vw, 1.9rem); line-height: 1.15; overflow-wrap: anywhere; }
+.gp-head-row .gp-reroll { flex: none; }
+.recap-kicker { margin: 0 0 -10px; text-align: center; }
+.gp-line { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+.gp-line-num { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: var(--chip-bg); font-family: var(--font-display); font-weight: 700; font-size: .8rem; }
+.gp-line-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-line .content-name { grid-column: 2; grid-row: 2; margin-top: -6px; }

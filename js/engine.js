@@ -253,7 +253,7 @@ export function gpStory(session, gp, players, { url = '' } = {}) {
   const wins = {};
   races.forEach((r) => raceWinners(r).forEach((pid) => { wins[pid] = (wins[pid] || 0) + 1; }));
   const seed = gp.id || gpNumber;
-  const title = 'GP ' + gpNumber;
+  const title = gp.name || 'GP ' + gpNumber;
 
   let kicker, headline;
   if (!first) { kicker = 'Grand Prix'; headline = title + ' terminé.'; }
@@ -312,5 +312,54 @@ export function gpStory(session, gp, players, { url = '' } = {}) {
 
   const cta = 'Qui relève le défi ?' + (url ? ' ' + url : '');
   const message = [headline, '', ...lines, '', cta].join('\n');
-  return { gpNumber, kicker, headline, lines, standings, message };
+  return { gpNumber, title: gpTitle(session, gp), kicker, headline, lines, standings, message };
 }
+
+// ---------- Noms de Grand Prix ----------
+// Un nom drôle tiré au sort à la création du GP, pour éviter « Grand Prix 1 ».
+const GP_PREFIXES = ['Grand Prix', 'Coupe', 'Trophée', 'Challenge', 'Open', 'Rallye', 'Derby', 'Classique', 'Championnat'];
+const GP_THEMES = [
+  'de la Banane Perdue', 'des Carapaces Rancunières', 'du Dernier Virage', 'du Dérapage Contrôlé',
+  'des Freins Inutiles', 'du Turbo Imaginaire', 'des Mauvais Perdants', 'des Bons Perdants', 'du Coup de Volant',
+  'du Klaxon Fou', 'des Pneus Lisses', 'de la Mauvaise Foi', 'du Raccourci Interdit', 'des Éclairs Injustes',
+  'du Pot d’Échappement', 'de la Sortie de Piste', 'du Canapé', 'des Manettes Collantes', 'du Dernier Tour',
+  'de la Chicane', 'des Champions du Dimanche', 'du Grand Frisson', 'de la Carapace Bleue', 'des Larmes de Pilote',
+  'du Volant d’Or', 'de la Ligne d’Arrivée', 'du Plein de Super', 'des Excuses Bidons', 'du Feu Vert',
+  'de la Trajectoire Douteuse', 'des Coudes Serrés', 'du Ravitaillement', 'de la Dernière Chance', 'du Chrono Fou',
+  'des Rétroviseurs', 'de la Marche Arrière', 'du Nuage de Poussière', 'des Pilotes Fatigués', 'du Drapeau à Damier',
+];
+const GP_LATE = ['de Minuit', 'des Insomniaques', 'du Dernier Café', 'des Yeux Fatigués'];
+const GP_EARLY = ['de l’Apéro', 'des Chips', 'de l’Échauffement'];
+
+// rnd : fonction qui renvoie un nombre dans [0, 1[. ctx : contexte de la soirée.
+export function gpName(rnd = Math.random, { used = [], gpNumber = 1, hour = 20, lastWinner = null } = {}) {
+  const at = (list) => list[Math.floor(rnd() * list.length) % list.length];
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const roll = rnd();
+    let name;
+    if (lastWinner && roll < 0.18) name = at(['Coupe', 'Opération', 'Trophée', 'Challenge']) + ' Anti-' + lastWinner;
+    else if (gpNumber === 2 && roll < 0.3) name = at(GP_PREFIXES) + ' de la Revanche';
+    else if (gpNumber === 3 && roll < 0.3) name = at(GP_PREFIXES) + ' de la Belle';
+    else if ((hour >= 23 || hour < 5) && roll < 0.35) name = at(GP_PREFIXES) + ' ' + at(GP_LATE);
+    else if (gpNumber === 1 && hour < 21 && hour >= 5 && roll < 0.3) name = at(GP_PREFIXES) + ' ' + at(GP_EARLY);
+    else name = at(GP_PREFIXES) + ' ' + at(GP_THEMES);
+    if (!used.includes(name)) return name;
+  }
+  return at(GP_PREFIXES) + ' ' + at(GP_THEMES);
+}
+
+// Contexte d'une soirée pour nommer son prochain GP (ou renommer gp).
+export function gpNameContext(session, players, gp = null, now = new Date()) {
+  const list = session.grandPrix.filter((g) => g !== gp);
+  const index = gp ? session.grandPrix.indexOf(gp) : session.grandPrix.length;
+  const prev = session.grandPrix[index - 1];
+  const prevTop = prev && gpStandings(prev, players).filter((r) => r.rank === 1);
+  return {
+    used: list.map((g) => g.name).filter(Boolean),
+    gpNumber: index + 1,
+    hour: now.getHours(),
+    lastWinner: prevTop?.length === 1 && prevTop[0].points > 0 ? prevTop[0].player.name : null,
+  };
+}
+
+export const gpTitle = (session, gp) => gp.name || 'Grand Prix ' + (session.grandPrix.indexOf(gp) + 1);
