@@ -4,8 +4,8 @@
 
 <p align="center">
   <img src="docs/screenshots/01-soiree.jpg" width="260" alt="Lancer une soirée" />
-  <img src="docs/screenshots/02-grand-prix.jpg" width="260" alt="Saisie sur la chronologie du Grand Prix" />
-  <img src="docs/screenshots/03-gp-termine.jpg" width="260" alt="Grand Prix terminé" />
+  <img src="docs/screenshots/02-grand-prix.jpg" width="260" alt="Piste du Grand Prix et grille des places" />
+  <img src="docs/screenshots/03-gp-termine.jpg" width="260" alt="Récap de fin de Grand Prix" />
 </p>
 
 ## Sommaire
@@ -23,10 +23,12 @@
 - **Trois onglets** : Soirée, Classement, Réglages.
 - **Soirée en un clic** : les joueurs de la soirée précédente sont présélectionnés, le premier Grand Prix est tiré au sort et démarre tout de suite.
 - **Tirage automatique** : jamais deux fois le même circuit dans un GP ; les circuits joués récemment deviennent moins probables, sans être interdits. Un ou plusieurs jeux, éditions et DLC au choix, 2 à 8 courses.
-- **Saisie sur la chronologie** : la place réelle de chaque joueur (bots compris), les points s'affichent en direct, le podium reste visible. « Changer de circuit » tant qu'une course n'est pas jouée.
+- **Piste du Grand Prix** : les courses défilent sur une piste, un kart marque la course en cours et le classement reste visible dans un bandeau. Les courses saisies se rangent dans un repli.
+- **Grille des places** : on touche une place (1 à 12, ou 24 pour Mario Kart World) puis le joueur ; les cases vides sont les bots. La course s'enregistre seule quand tout le monde est placé, avec « Annuler » quelques secondes.
+- **Récap de fin de GP** : podium animé, faits marquants (roi des courses, meilleure remontée, course la plus serrée) et classement de la soirée avec les places gagnées ou perdues.
 - **Pas de validation** : chaque course saisie compte immédiatement au classement et reste modifiable.
-- **Tirage express** : juste une grille de circuits, sans scores (Garder / Changer / Relancer).
-- **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV.
+- **Tirage express** : juste une grille de circuits, sans scores ; chaque circuit se relance individuellement.
+- **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV depuis les Réglages.
 - **Hors ligne, sans compte, sans serveur** ; export / import JSON.
 
 ## Démarrage rapide
@@ -42,8 +44,8 @@ python3 -m http.server 3000
 
 1. **Soirée → Lancer une soirée** : ajustez les joueurs (2 à 12) et, si besoin, « Jeux et courses ».
 2. **Lancer la soirée** : le Grand Prix s'ouvre sur la première course.
-3. **Saisissez les places** sous la course ouverte, puis « Enregistrer et passer à la suivante ».
-4. **Grand Prix terminé** → « Grand Prix suivant » tire une nouvelle grille avec les mêmes réglages.
+3. **Placez les joueurs** sur la grille de la course ouverte : la course suivante s'ouvre toute seule. L'icône de relance change le circuit tant que personne n'est placé ; le menu « … » supprime le GP.
+4. **Récap** → « Grand Prix suivant » tire une nouvelle grille avec les mêmes réglages.
 
 La soirée la plus récente est affichée sur l'accueil avec son classement ; les précédentes restent consultables.
 
@@ -85,7 +87,8 @@ GitHub Pages à chaque push sur `master` (Settings → Pages → Source : GitHub
 │   ├── store.js          # Persistance locale, catalogue préchargé, migrations
 │   ├── engine.js         # Tirage pondéré, barème, classements (pur, testé)
 │   ├── draw.js           # Préférences de tirage, création d'un GP
-│   ├── views.js          # Soirée, Grand Prix, saisie
+│   ├── views.js          # Accueil, nouvelle soirée, soirée
+│   ├── gp.js             # Grand Prix : piste, grille des places, récap
 │   ├── views-admin.js    # Tirage express, jeux, classement, réglages
 │   ├── race-visuals.js   # Badges et chronologie
 │   ├── updates.js        # Version et mise à jour PWA

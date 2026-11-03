@@ -168,3 +168,67 @@ export function allTimeStats(sessions, players) {
   const rows = Object.values(stats).sort((a, b) => b.pts - a.pts);
   return withRanks(rows, 'pts');
 }
+
+// ---------- Récap de fin de Grand Prix ----------
+
+// Joueur(s) le(s) mieux placé(s) d'une course (place réelle la plus basse).
+export function raceWinners(race) {
+  const entries = Object.entries(race.results || {}).filter(([, r]) => r && typeof r.pos === 'number');
+  if (!entries.length) return [];
+  const best = Math.min(...entries.map(([, r]) => r.pos));
+  return entries.filter(([, r]) => r.pos === best).map(([pid]) => pid);
+}
+
+// Classement de la soirée avant/après un GP, avec la variation de rang.
+export function sessionRankingDelta(session, gpId) {
+  const index = session.grandPrix.findIndex((g) => g.id === gpId);
+  const upTo = (n) => sessionRanking({ ...session, grandPrix: session.grandPrix.slice(0, n) });
+  const before = Object.fromEntries(upTo(index).map((r) => [r.pid, r.rank]));
+  const firstGp = index <= 0;
+  return upTo(index + 1).map((row) => ({ ...row, delta: firstGp ? 0 : before[row.pid] - row.rank }));
+}
+
+// Faits marquants : victoires, meilleure remontée, course la plus serrée.
+export function gpHighlights(gp, players) {
+  const name = (pid) => players.find((p) => p.id === pid)?.name || '?';
+  const facts = [];
+  const races = gp.races.filter((r) => Object.keys(r.results || {}).length);
+  if (!races.length || !players.length) return facts;
+
+  const wins = {};
+  races.forEach((r) => raceWinners(r).forEach((pid) => { wins[pid] = (wins[pid] || 0) + 1; }));
+  const maxWins = Math.max(0, ...Object.values(wins));
+  if (maxWins > 0) {
+    const kings = Object.keys(wins).filter((pid) => wins[pid] === maxWins);
+    facts.push({ key: 'wins', title: 'Roi des courses',
+      text: kings.map(name).join(' et ') + ' · ' + maxWins + ' course' + (maxWins > 1 ? 's' : '') + ' remportée' + (maxWins > 1 ? 's' : '') });
+  }
+
+  if (races.length > 1) {
+    const afterFirst = Object.fromEntries(gpStandings({ ...gp, races: races.slice(0, 1) }, players).map((r) => [r.player.id, r.rank]));
+    const final = gpStandings(gp, players);
+    let best = null;
+    final.forEach((r) => {
+      const gain = afterFirst[r.player.id] - r.rank;
+      if (gain > 0 && (!best || gain > best.gain)) best = { pid: r.player.id, gain, from: afterFirst[r.player.id], to: r.rank };
+    });
+    if (best) facts.push({ key: 'comeback', title: 'Meilleure remontée',
+      text: name(best.pid) + ' · ' + ordinal(best.from) + ' → ' + ordinal(best.to) });
+  }
+
+  if (players.length > 1) {
+    let tight = null;
+    races.forEach((r) => {
+      const ranked = Object.entries(r.results).filter(([, x]) => typeof x?.pos === 'number').sort((a, b) => a[1].pos - b[1].pos);
+      if (ranked.length < 2) return;
+      const gap = ranked[1][1].pos - ranked[0][1].pos;
+      if (!tight || gap < tight.gap) tight = { race: r, gap, a: ranked[0][0], b: ranked[1][0] };
+    });
+    if (tight) facts.push({ key: 'tight', title: 'Course la plus serrée',
+      text: tight.race.contentName + ' · ' + name(tight.a) + ' devant ' + name(tight.b) +
+        (tight.gap <= 1 ? ' d’une place' : ' de ' + tight.gap + ' places') });
+  }
+  return facts;
+}
+
+export const ordinal = (n) => n + (n === 1 ? 'er' : 'e');

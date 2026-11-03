@@ -54,3 +54,37 @@ export function timelineStep({ index, game, previousGame, card, state = '', labe
         label ? h('div', { class: 'timeline-label' }, label) : null,
         card)));
 }
+
+// Nom court affiché sur la pastille du jeu.
+export function gameShort(game) {
+  if (/mario kart.*8/i.test(game.name)) return 'MK8';
+  if (/mario kart.*world/i.test(game.name)) return 'World';
+  return game.name.split(/\s+/).map((word) => word[0]).slice(0, 4).join('').toUpperCase();
+}
+
+export function gamePill(game) {
+  return h('span', { class: 'game-pill', style: gameStyle(game), title: game.name }, gameShort(game));
+}
+
+// Nombre de pilotes d'une course : réglage du jeu, sinon 24 pour World, 12 ailleurs.
+export function racersFor(game) {
+  const saved = game && findGame(game.id);
+  if (saved?.racers) return saved.racers;
+  return /world/i.test(game?.name || '') ? 24 : 12;
+}
+
+// Icônes SVG partagées (décoratives).
+export const ICONS = {
+  kart: '<svg viewBox="0 0 32 40"><rect x="2" y="6" width="7" height="10" rx="2" class="k-wheel"/><rect x="23" y="6" width="7" height="10" rx="2" class="k-wheel"/><rect x="2" y="25" width="7" height="10" rx="2" class="k-wheel"/><rect x="23" y="25" width="7" height="10" rx="2" class="k-wheel"/><path d="M8 4h16l3 10v14l-4 9H9l-4-9V14z" class="k-body"/><circle cx="16" cy="17" r="5.5" class="k-helmet"/><rect x="10" y="30" width="12" height="3" rx="1.5" class="k-bumper"/></svg>',
+  reroll: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+};
+export const icon = (name) => h('span', { class: 'gp-icon', 'aria-hidden': 'true', html: ICONS[name] });
+
+// Bouton « changer de circuit » (icône de relance).
+export function rerollButton(onClick, testid) {
+  return h('button', {
+    class: 'gp-reroll', 'aria-label': 'Changer de circuit', title: 'Changer de circuit',
+    'data-testid': testid, onclick: onClick,
+  }, icon('reroll'));
+}

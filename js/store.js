@@ -77,7 +77,7 @@ function seedData() {
     version: SCHEMA_VERSION,
     settings: {
       appName: 'Mario Kart Party',
-      bareme: [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+      bareme: [15, 12, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       theme: 'auto',
     },
     players: [],
@@ -86,6 +86,7 @@ function seedData() {
         id: uid('g'),
         name: 'Mario Kart World',
         icon: '🌍',
+        racers: 24,
         archived: false,
         createdAt: Date.now(),
         editions: [
@@ -109,6 +110,7 @@ function seedData() {
         id: uid('g'),
         name: 'Mario Kart 8 Deluxe',
         icon: '🏁',
+        racers: 12,
         archived: false,
         createdAt: Date.now(),
         editions: [
