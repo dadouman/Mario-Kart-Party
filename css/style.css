@@ -1056,3 +1056,46 @@ body.is-tv .app-main { max-width: none; padding: 0; margin: 0; }
   .tv-head { align-items: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { .tv-stop.is-next .tv-node { animation: none; } }
+
+/* ---------- Équipes de 2 ---------- */
+.team-toggle { display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; }
+.team-toggle input { width: 20px; height: 20px; accent-color: var(--primary); flex: none; }
+.team-toggle-text { display: grid; gap: 2px; min-width: 0; }
+.team-toggle.is-on { border-color: color-mix(in srgb, var(--primary) 45%, transparent); background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.team-toggle.is-disabled { cursor: default; opacity: .6; }
+.team-duo { display: inline-flex; flex: none; }
+.team-duo .player-avatar + .player-avatar { margin-left: -7px; box-shadow: 0 0 0 2px var(--surface-2); }
+.team-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px color-mix(in srgb, #fff 70%, transparent); }
+
+.gp-bar-item.is-team { border-color: color-mix(in srgb, var(--team) 55%, transparent); background: color-mix(in srgb, var(--team) 12%, var(--surface-2)); }
+.gp-bar-item.is-team .gp-bar-name { color: var(--team); font-weight: 750; }
+.gp-bar-item.is-team.is-first { box-shadow: 0 0 0 1.5px var(--gold); }
+
+.gp-teams-box:empty { display: none; }
+.gp-teams { margin-top: 12px; padding: 10px 12px; }
+.gp-teams summary { cursor: pointer; gap: 10px; flex-wrap: wrap; }
+.gp-teams summary .sub { font-size: .78rem; }
+.gp-teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.gp-team { display: grid; gap: 6px; padding: 8px; border-radius: 12px; border-top: 4px solid var(--team); background: color-mix(in srgb, var(--team) 8%, var(--surface-2)); }
+.gp-team-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: .8rem; }
+.gp-team-name { font-weight: 750; color: var(--team); }
+.gp-team-player { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px 4px 4px; border: 1.5px solid transparent; border-radius: 999px; background: var(--surface); font-size: .85rem; font-weight: 600; text-align: left; }
+.gp-team-player > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-team-player.is-selected { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent); }
+.gp-teams-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+.recap-teams h3 { margin: 0 0 8px; font-size: .95rem; }
+.recap-teams ol { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.recap-teams li { display: grid; grid-template-columns: 22px auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 12px; border-left: 4px solid var(--team); border-radius: 10px; background: var(--surface-2); }
+.recap-teams li.is-first { background: color-mix(in srgb, var(--team) 16%, var(--surface-2)); }
+.recap-teams li.is-first .recap-team-pts { font-size: 1.15rem; }
+.recap-team-text { display: grid; min-width: 0; }
+.recap-team-text strong { color: var(--team); }
+.recap-team-text .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.recap-team-pts { font-family: var(--font-display); }
+
+.tv-teams li { grid-template-columns: calc(4 * var(--u)) auto minmax(0, 1fr) auto; border-left: calc(.7 * var(--u)) solid var(--team); padding-left: calc(1.2 * var(--u)); }
+.tv-teams .tv-sname { color: var(--team); font-family: var(--font-display); display: grid; line-height: 1.1; }
+.tv-teams .tv-sname small { font-family: var(--font-body, inherit); font-size: .62em; color: var(--text-muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.tv-teams .team-duo .player-avatar + .player-avatar { box-shadow: 0 0 0 2px var(--panel); margin-left: calc(-1 * var(--u)); }
+.tv-fact.is-team { --fact: #2f6fdf; }

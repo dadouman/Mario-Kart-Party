@@ -11,7 +11,7 @@ import {
 } from './ui.js';
 import {
   raceComplete, gpFinished, sessionRanking, gpStandings,
-  gpTitle,
+  gpTitle, canPlayTeams,
 } from './engine.js';
 import { DrawPrefsEditor, startGrandPrix } from './draw.js';
 import { gpUrl, launchGp, GpView, RaceView } from './gp.js';
@@ -101,6 +101,7 @@ export function NewSessionView() {
     name: 'Soirée du ' + new Date().toLocaleDateString('fr-FR'),
     // Les joueurs de la dernière soirée sont présélectionnés.
     players: previous ? getPlayers(previous.playerIds).filter((p) => !p.archived) : [],
+    teams: !!previous?.teamMode,
   };
 
   const nameInput = h('input', {
@@ -120,7 +121,23 @@ export function NewSessionView() {
   const suggestionsBlock = h('div', { class: 'chips-group' },
     h('span', { class: 'chips-label' }, 'Déjà venus · touchez pour ajouter'), suggestionsBox);
 
-  function refreshAll() { refreshChips(); refreshSuggestions(); createBtn.disabled = draft.players.length < 2; }
+  const teamBox = h('input', { type: 'checkbox', 'data-testid': 'toggle-teams' });
+  const teamHint = h('span', { class: 'sub team-toggle-hint' });
+  teamBox.addEventListener('change', () => { draft.teams = teamBox.checked; refreshTeamToggle(); });
+  const teamToggle = h('label', { class: 'team-toggle' }, teamBox,
+    h('span', { class: 'team-toggle-text' }, h('strong', {}, 'Jouer en équipes de 2'), teamHint));
+
+  function refreshTeamToggle() {
+    const ok = canPlayTeams(draft.players.length);
+    teamBox.disabled = !ok;
+    teamBox.checked = ok && !!draft.teams;
+    teamToggle.classList.toggle('is-on', teamBox.checked);
+    teamToggle.classList.toggle('is-disabled', !ok);
+    teamHint.textContent = !ok ? 'Il faut un nombre pair de joueurs, au moins 4'
+      : teamBox.checked ? 'Équipes tirées au sort, modifiables dans le GP' : 'Points additionnés par duo';
+  }
+
+  function refreshAll() { refreshChips(); refreshSuggestions(); refreshTeamToggle(); createBtn.disabled = draft.players.length < 2; }
 
   function refreshChips() {
     chipsLabel.textContent = 'Dans la soirée · ' + draft.players.length;
@@ -177,6 +194,7 @@ export function NewSessionView() {
         id: newId('s'), name: draft.name.trim() || 'Soirée', date: Date.now(),
         playerIds: draft.players.map((p) => p.id), grandPrix: [],
       };
+      if (draft.teams && canPlayTeams(draft.players.length)) session.teamMode = true;
       const gp = startGrandPrix(st, session);
       if (!gp) return;
       st.sessions.push(session);
@@ -205,6 +223,7 @@ export function NewSessionView() {
           }, 'Ajouter')),
         h('div', { class: 'chips-group is-in' }, chipsLabel, chipsBox),
         suggestionsBlock),
+      teamToggle,
       h('details', { class: 'draw-options' },
         h('summary', {}, 'Nom de la soirée'), nameInput)),
     DrawPrefsEditor(st, { collapsed: true }),

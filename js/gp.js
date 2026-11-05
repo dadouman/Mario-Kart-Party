@@ -8,8 +8,9 @@ import { h, toast, confirmModal, avatarEl, moreMenu } from './ui.js';
 import {
   raceComplete, gpStandings, gpFinished, pointsFor, raceWinners,
   sessionRankingDelta, gpHighlights, ordinal, gpTitle,
+  gpTeams, teamStandings, canPlayTeams, makeTeams, swapTeamPlayers, gpPoints,
 } from './engine.js';
-import { startGrandPrix, replaceRace, renameGp } from './draw.js';
+import { startGrandPrix, replaceRace, renameGp, nextTeams } from './draw.js';
 import { raceGame, gameStyle, gamePill, racersFor, icon, rerollButton } from './race-visuals.js';
 import { NotFound } from './views.js';
 import { openShare, SHARE_ICON, factIconSvg } from './share.js';
@@ -44,9 +45,22 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   let celebrated = gpFinished(gp, players.length);
 
   // ---------- En-tête et menu « … » ----------
-  const menu = moreMenu([{
+  function buildMenu() {
+  const teamItem = canPlayTeams(players.length) ? [{
+    label: gpTeams(gp, players) ? 'Jouer sans équipes' : 'Jouer en équipes de 2', testid: 'button-gp-teams',
+    onClick: () => {
+      if (gpTeams(gp, players)) { session.teamMode = false; delete gp.teams; toast('Équipes retirées'); }
+      else { session.teamMode = true; gp.teams = nextTeams(session) || makeTeams(session.playerIds); teamsOpen = true; toast('Équipes de 2 tirées au sort'); }
+      save();
+      const fresh = buildMenu();
+      menu.replaceWith(fresh);
+      menu = fresh;
+      rerender();
+    },
+  }] : [];
+  return moreMenu([{
     label: 'Mode grand écran', testid: 'button-gp-tv', onClick: () => openTv(session),
-  }, {
+  }, ...teamItem, {
     label: 'Supprimer le Grand Prix', danger: true, testid: 'button-cancel-gp',
     onClick: () => confirmModal({
       title: 'Supprimer ce Grand Prix ?',
@@ -60,6 +74,8 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       },
     }),
   }], { testid: 'button-gp-menu' });
+  }
+  let menu = buildMenu();
   const header = h('header', { class: 'gp-head' },
     h('a', { class: 'back-link', href: '#/session/' + sessionId }, '← ' + session.name),
     h('div', { class: 'gp-head-row' },
@@ -80,8 +96,15 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   // ---------- Bandeau de classement ----------
   function renderBar() {
     const doneCount = gp.races.filter(isDone).length;
+    const teamRows = teamStandings(gp, players);
     bar.replaceChildren(
-      h('ol', { class: 'gp-bar-list' },
+      teamRows.length ? h('ol', { class: 'gp-bar-list', 'data-testid': 'gp-team-ranking' },
+        teamRows.map((row) => h('li', { class: 'gp-bar-item is-team' + (row.rank === 1 ? ' is-first' : ''), style: '--team:' + row.team.color },
+          h('span', { class: 'gp-bar-rank' }, String(row.rank)),
+          h('span', { class: 'team-duo' }, row.members.map((p) => avatarEl(p, 20))),
+          h('span', { class: 'gp-bar-name' }, row.team.name.replace('Équipe ', '')),
+          h('strong', { class: 'gp-bar-pts' }, String(row.points)))))
+      : h('ol', { class: 'gp-bar-list' },
         gpStandings(gp, players).map((row) => h('li', { class: 'gp-bar-item' + (row.rank === 1 ? ' is-first' : '') },
           h('span', { class: 'gp-bar-rank' }, String(row.rank)),
           avatarEl(row.player, 22),
@@ -89,6 +112,46 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
           h('strong', { class: 'gp-bar-pts' }, String(row.points))))),
       h('span', { class: 'gp-bar-count', 'aria-label': doneCount + ' courses sur ' + gp.races.length },
         doneCount + '/' + gp.races.length));
+  }
+
+  // ---------- Équipes ----------
+  const teamsBox = h('div', { class: 'gp-teams-box' });
+  let teamsOpen = !gp.races.some((r) => Object.keys(r.results || {}).length);
+  let swapPick = null;
+  function renderTeams() {
+    const teams = gpTeams(gp, players);
+    if (!teams) { teamsBox.replaceChildren(); return; }
+    const totals = gpPoints(gp);
+    const rows = teamStandings(gp, players);
+    const panel = h('details', { class: 'gp-teams card', open: teamsOpen, 'data-testid': 'gp-teams' },
+      h('summary', { class: 'spread' },
+        h('strong', {}, 'Équipes de 2'),
+        h('span', { class: 'sub' }, swapPick ? 'Touchez un joueur d’une autre équipe' : 'Touchez deux joueurs pour les échanger')),
+      h('div', { class: 'gp-teams-grid' }, teams.map((team) => {
+        const row = rows.find((r) => r.team.id === team.id);
+        return h('div', { class: 'gp-team', style: '--team:' + team.color },
+          h('div', { class: 'gp-team-head' }, h('span', { class: 'gp-team-name' }, team.name), h('strong', {}, (row?.points || 0) + ' pts')),
+          team.playerIds.map((pid) => byId[pid] && h('button', {
+            class: 'gp-team-player' + (swapPick === pid ? ' is-selected' : ''),
+            'data-testid': 'team-player-' + pid, 'aria-pressed': String(swapPick === pid),
+            onclick: () => {
+              if (!swapPick || swapPick === pid) { swapPick = swapPick === pid ? null : pid; return renderTeams(); }
+              const ok = swapTeamPlayers(gp.teams, swapPick, pid);
+              swapPick = ok ? null : pid;
+              if (ok) { save(); toast('Joueurs échangés'); }
+              rerender();
+            },
+          }, avatarEl(byId[pid], 24), h('span', {}, byId[pid].name), h('span', { class: 'sub' }, String(totals[pid] || 0)))));
+      })),
+      h('div', { class: 'gp-teams-foot' }, rerollButton(() => {
+        gp.teams = makeTeams(session.playerIds);
+        swapPick = null;
+        save();
+        toast('Nouvelles équipes');
+        rerender();
+      }, 'button-shuffle-teams', 'Mélanger les équipes')));
+    panel.addEventListener('toggle', () => { teamsOpen = panel.open; });
+    teamsBox.replaceChildren(panel);
   }
 
   // ---------- Piste ----------
@@ -156,14 +219,17 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       selPlayer ? 'Où finit ' + byId[selPlayer].name + ' ?' :
       unplaced.length ? 'Touchez une place, puis le joueur' : 'Course complète';
 
+    const teamOf = Object.fromEntries((gpTeams(gp, players) || []).flatMap((t) => t.playerIds.map((id) => [id, t])));
     const chips = h('div', { class: 'gp-chips' }, players.map((p) => {
       const pos = race.results[p.id]?.pos;
+      const team = teamOf[p.id];
       return h('button', {
         class: 'gp-chip' + (selPlayer === p.id ? ' is-selected' : '') + (typeof pos === 'number' ? ' is-placed' : ''),
         style: '--player:' + p.color, 'data-testid': 'chip-player-' + p.id,
         'aria-pressed': String(selPlayer === p.id),
         onclick: () => onPlayer(race, p.id),
       }, avatarEl(p, 24), h('span', { class: 'gp-chip-name' }, p.name),
+        team ? h('span', { class: 'team-dot', style: 'background:' + team.color, title: team.name, 'aria-label': team.name }) : null,
         h('span', { class: 'gp-chip-pos' }, typeof pos === 'number' ? ordinal(pos) : '?'));
     }));
 
@@ -228,6 +294,7 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
   function completeRace(race, snapshot) {
     if (!flushSave()) toast('Sauvegarde impossible sur cet appareil. Vos saisies restent dans cet onglet.', 'err');
     const next = gp.races.find((r) => r.num > race.num && !isDone(r)) || firstOpen();
+    teamsOpen = false;
     rerender();
     toast('Course ' + race.num + ' enregistrée', '', {
       duration: 5000,
@@ -286,13 +353,22 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
       }));
     const rest = standings.slice(3);
 
-    const facts = gpHighlights(gp, players);
+    const facts = gpHighlights(gp, players).filter((f) => f.key !== 'team');
+    const teamRows = teamStandings(gp, players);
+    const teamBlock = teamRows.length ? h('section', { class: 'recap-teams', 'data-testid': 'recap-teams' },
+      h('h3', {}, 'Équipes'),
+      h('ol', {}, teamRows.map((row) => h('li', { class: row.rank === 1 ? 'is-first' : '', style: '--team:' + row.team.color },
+        h('span', { class: 'rank-pos' }, String(row.rank)),
+        h('span', { class: 'team-duo' }, row.members.map((p) => avatarEl(p, 26))),
+        h('span', { class: 'recap-team-text' }, h('strong', {}, row.team.name), h('span', { class: 'sub' }, row.members.map((p) => p.name).join(' & '))),
+        h('strong', { class: 'recap-team-pts' }, row.points + ' pts'))))) : null;
     const delta = sessionRankingDelta(session, gp.id);
     const showDelta = gpNumber > 1;
 
     recapBox.replaceChildren(h('section', { class: 'gp-recap', 'data-testid': 'gp-completion', 'aria-label': 'Récap du Grand Prix' },
       h('p', { class: 'recap-kicker' }, 'GP ' + gpNumber + ' terminé'),
       h('h2', { class: 'recap-title' }, gpTitle(session, gp)),
+      teamBlock,
       podium,
       rest.length ? h('ol', { class: 'recap-rest' }, rest.map((row) => h('li', {},
         h('span', { class: 'rank-pos' }, String(row.rank)), avatarEl(row.player, 22),
@@ -322,11 +398,12 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
 
   function rerender() {
     renderBar();
+    renderTeams();
     renderTrack();
     renderRecap();
   }
 
-  const view = h('div', { class: 'fade-in gp-page' }, header, bar, trackBox, recapBox);
+  const view = h('div', { class: 'fade-in gp-page' }, header, bar, teamsBox, trackBox, recapBox);
   rerender();
   if (active != null && gp.races.some((r) => r.num < active || isDone(r))) {
     requestAnimationFrame(() => view.querySelector('.gp-stop.is-open')?.scrollIntoView({ block: 'start', behavior: 'instant' }));

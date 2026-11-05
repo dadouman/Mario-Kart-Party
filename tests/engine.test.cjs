@@ -128,3 +128,27 @@ test('GP names are fun, avoid repeats and use the evening context', async () => 
   assert.equal(gpTitle(session, gp1), 'Coupe du Canapé');
   assert.match(gpStory(session, gp1, ps).headline, /^Coupe du Canapé : /);
 });
+
+test('teams of two add up their members points and can swap players', async () => {
+  const { makeTeams, teamsValid, teamStandings, swapTeamPlayers, canPlayTeams, gpHighlights } = await engine;
+  assert.equal(canPlayTeams(3), false);
+  assert.equal(canPlayTeams(5), false);
+  assert.equal(canPlayTeams(4), true);
+  const players = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id.toUpperCase() }));
+  const teams = makeTeams(players.map((p) => p.id), () => 0.5);
+  assert.equal(teams.length, 2);
+  assert.ok(teamsValid(teams, ['a', 'b', 'c', 'd']));
+  assert.equal(teamsValid(teams, ['a', 'b', 'c', 'd', 'e']), false);
+  const gp = {
+    bareme: [15, 12, 10, 8],
+    teams: [{ id: 't0', name: 'Équipe Rouge', color: '#f00', playerIds: ['a', 'd'] }, { id: 't1', name: 'Équipe Bleue', color: '#00f', playerIds: ['b', 'c'] }],
+    races: [{ results: { a: { pos: 1 }, b: { pos: 2 }, c: { pos: 3 }, d: { pos: 4 } } }],
+  };
+  const rows = teamStandings(gp, players);
+  assert.deepEqual(rows.map((r) => [r.team.id, r.points, r.rank]), [['t0', 23, 1], ['t1', 22, 2]]);
+  assert.equal(gpHighlights(gp, players)[0].key, 'team');
+  assert.ok(swapTeamPlayers(gp.teams, 'd', 'c'));
+  assert.deepEqual(teamStandings(gp, players).map((r) => [r.team.id, r.points]), [['t0', 25], ['t1', 20]]);
+  assert.equal(swapTeamPlayers(gp.teams, 'a', 'c'), false);
+  assert.equal(teamStandings({ ...gp, teams: null }, players).length, 0);
+});

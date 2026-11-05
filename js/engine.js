@@ -169,6 +169,64 @@ export function allTimeStats(sessions, players) {
   return withRanks(rows, 'pts');
 }
 
+// ---------- Équipes de 2 ----------
+// Chaque GP peut avoir ses équipes : [{ id, name, color, playerIds: [a, b] }].
+// Les points d'une équipe sont la somme des points de ses deux joueurs.
+export const TEAM_COLORS = [
+  { name: 'Rouge', color: '#e5402b' }, { name: 'Bleue', color: '#2f6fdf' },
+  { name: 'Verte', color: '#1d9a4d' }, { name: 'Jaune', color: '#e0a100' },
+  { name: 'Violette', color: '#8b4fd6' }, { name: 'Orange', color: '#f07a1a' },
+];
+
+export const canPlayTeams = (count) => count >= 4 && count % 2 === 0 && count / 2 <= TEAM_COLORS.length;
+
+export function makeTeams(playerIds, rng = Math.random) {
+  const ids = [...playerIds];
+  for (let i = ids.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+  }
+  return Array.from({ length: Math.floor(ids.length / 2) }, (_, i) => ({
+    id: 't' + i, name: 'Équipe ' + TEAM_COLORS[i].name, color: TEAM_COLORS[i].color,
+    playerIds: ids.slice(i * 2, i * 2 + 2),
+  }));
+}
+
+// Les équipes ne comptent que si chaque joueur est dans exactement une équipe de 2.
+export function teamsValid(teams, playerIds) {
+  if (!Array.isArray(teams) || !teams.length) return false;
+  const ids = teams.flatMap((t) => t.playerIds || []);
+  return teams.every((t) => t.playerIds?.length === 2) && ids.length === playerIds.length &&
+    new Set(ids).size === ids.length && playerIds.every((id) => ids.includes(id));
+}
+
+export function gpTeams(gp, players) {
+  return teamsValid(gp?.teams, players.map((p) => p.id)) ? gp.teams : null;
+}
+
+export function teamStandings(gp, players) {
+  const teams = gpTeams(gp, players);
+  if (!teams) return [];
+  const totals = gpPoints(gp);
+  const byId = Object.fromEntries(players.map((p) => [p.id, p]));
+  const rows = teams.map((team, order) => ({
+    team, order,
+    members: team.playerIds.map((id) => byId[id]),
+    points: team.playerIds.reduce((sum, id) => sum + (totals[id] || 0), 0),
+  })).sort((a, b) => b.points - a.points || a.order - b.order);
+  return withRanks(rows, 'points');
+}
+
+// Échange deux joueurs d'équipes différentes.
+export function swapTeamPlayers(teams, a, b) {
+  const ta = teams.find((t) => t.playerIds.includes(a));
+  const tb = teams.find((t) => t.playerIds.includes(b));
+  if (!ta || !tb || ta === tb) return false;
+  ta.playerIds = ta.playerIds.map((id) => (id === a ? b : id));
+  tb.playerIds = tb.playerIds.map((id) => (id === b ? a : id));
+  return true;
+}
+
 // ---------- Récap de fin de Grand Prix ----------
 
 // Joueur(s) le(s) mieux placé(s) d'une course (place réelle la plus basse).
@@ -194,6 +252,17 @@ export function gpHighlights(gp, players) {
   const facts = [];
   const races = gp.races.filter((r) => Object.keys(r.results || {}).length);
   if (!races.length || !players.length) return facts;
+
+  const teamRows = teamStandings(gp, players);
+  if (teamRows.length) {
+    const top = teamRows.filter((r) => r.rank === 1);
+    const duo = (r) => r.members.map((p) => p.name).join(' & ');
+    facts.push(top.length === 1
+      ? { key: 'team', color: top[0].team.color, title: 'Équipe gagnante', who: top[0].team.name, short: duo(top[0]) + ' · ' + top[0].points + ' pts',
+        text: top[0].team.name + ' · ' + duo(top[0]) + ' · ' + top[0].points + ' pts' }
+      : { key: 'team', title: 'Équipes à égalité', who: top.map((r) => r.team.name.replace('Équipe ', '')).join(' & '),
+        short: 'à égalité · ' + top[0].points + ' pts', text: top.map((r) => r.team.name).join(' et ') + ' · ' + top[0].points + ' pts' });
+  }
 
   const wins = {};
   races.forEach((r) => raceWinners(r).forEach((pid) => { wins[pid] = (wins[pid] || 0) + 1; }));
@@ -285,6 +354,15 @@ export function gpStory(session, gp, players, { url = '' } = {}) {
   }
 
   const lines = [];
+  const teamRows = teamStandings(gp, players);
+  if (teamRows.length) {
+    const duo = (r) => r.members.map((p) => p.name).join(' & ');
+    const topTeams = teamRows.filter((r) => r.rank === 1);
+    lines.push(topTeams.length === 1
+      ? 'En équipes : ' + topTeams[0].team.name + ' (' + duo(topTeams[0]) + ') gagne avec ' + ptsLabel(topTeams[0].points) +
+        (teamRows[1] ? ', ' + ptsLabel(topTeams[0].points - teamRows[1].points) + ' devant ' + teamRows[1].team.name : '') + '.'
+      : 'En équipes : ' + topTeams.map((r) => r.team.name + ' (' + duo(r) + ')').join(' et ') + ' à égalité, ' + ptsLabel(topTeams[0].points) + '.');
+  }
   const podium = standings.slice(0, 3).map((r) => r.rank + '. ' + r.player.name + ' ' + ptsLabel(r.points));
   if (podium.length) lines.push(podium.join(' · '));
 
