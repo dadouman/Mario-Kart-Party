@@ -13,6 +13,7 @@ import { startGrandPrix, replaceRace, renameGp } from './draw.js';
 import { raceGame, gameStyle, gamePill, racersFor, icon, rerollButton } from './race-visuals.js';
 import { NotFound } from './views.js';
 import { openShare, SHARE_ICON, factIconSvg } from './share.js';
+import { openTv } from './tv.js';
 
 export const gpUrl = (session, gp) => '#/session/' + session.id + '/gp/' + gp.id;
 
@@ -44,6 +45,8 @@ export function GpView(sessionId, gpId, requestedRaceNum = null) {
 
   // ---------- En-tête et menu « … » ----------
   const menu = moreMenu([{
+    label: 'Mode grand écran', testid: 'button-gp-tv', onClick: () => openTv(session),
+  }, {
     label: 'Supprimer le Grand Prix', danger: true, testid: 'button-cancel-gp',
     onClick: () => confirmModal({
       title: 'Supprimer ce Grand Prix ?',

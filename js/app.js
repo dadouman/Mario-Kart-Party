@@ -7,6 +7,7 @@ import { HomeView, NewSessionView, SessionView, GpView, RaceView, NotFound } fro
 import { TirageView, GameView, ClassementView, ReglagesView } from './views-admin.js';
 import { getState } from './store.js';
 import { initUpdates } from './updates.js';
+import { TvView } from './tv.js';
 
 function route() {
   const hash = location.hash.replace(/^#/, '') || '/';
@@ -23,6 +24,7 @@ function route() {
       view = GpView(parts[1], parts[3]);
     else if (parts[0] === 'session' && parts[1] && parts[2] === 'gp' && parts[3] && parts[4] === 'course' && parts[5])
       view = RaceView(parts[1], parts[3], parseInt(parts[5], 10));
+    else if (parts[0] === 'ecran') view = TvView(parts[1] || null);
     else if (parts[0] === 'tirage') view = TirageView();
     else if (parts[0] === 'jeux' && !parts[1]) view = ReglagesView();
     else if (parts[0] === 'jeux' && parts[1] && parts[2] === 'import') view = GameView(parts[1], { importing: true });
@@ -34,6 +36,7 @@ function route() {
     console.error(e);
     view = NotFound();
   }
+  document.body?.classList.toggle('is-tv', parts[0] === 'ecran');
   render(view);
 
   // Onglet actif dans la barre de navigation

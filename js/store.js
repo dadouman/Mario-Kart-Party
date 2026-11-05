@@ -228,6 +228,21 @@ export function flushSave() {
 
 load();
 
+// Relit les données si une autre fenêtre les a modifiées (mode grand écran).
+// Renvoie true si l'état a changé.
+export function refreshFromStorage() {
+  if (!persistent || dirty) return false;
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw || raw === lastPersisted) return false;
+    state = migrate(JSON.parse(raw));
+    lastPersisted = raw;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 export function getState() {
   return state;
 }
