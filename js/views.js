@@ -116,12 +116,20 @@ export function NewSessionView() {
 
   const chipsBox = h('div', { class: 'row' });
   const suggestionsBox = h('div', { class: 'row' });
+  const chipsLabel = h('span', { class: 'chips-label' });
+  const suggestionsBlock = h('div', { class: 'chips-group' },
+    h('span', { class: 'chips-label' }, 'Déjà venus · touchez pour ajouter'), suggestionsBox);
 
   function refreshAll() { refreshChips(); refreshSuggestions(); createBtn.disabled = draft.players.length < 2; }
 
   function refreshChips() {
+    chipsLabel.textContent = 'Dans la soirée · ' + draft.players.length;
+    if (!draft.players.length) {
+      chipsBox.replaceChildren(h('span', { class: 'sub' }, 'Aucun joueur pour l\'instant'));
+      return;
+    }
     chipsBox.replaceChildren(...draft.players.map((p, i) => h('button', {
-      class: 'player-chip', 'data-testid': 'chip-player-' + p.name,
+      class: 'player-chip is-in', 'data-testid': 'chip-player-' + p.name,
       'aria-label': 'Retirer ' + p.name, title: 'Retirer',
       onclick: () => { draft.players.splice(i, 1); refreshAll(); },
     }, avatarEl(p), p.name, h('span', { 'aria-hidden': 'true' }, '×'))));
@@ -132,10 +140,11 @@ export function NewSessionView() {
     const favs = st.players.filter((p) => !p.archived && !used.has(p.id)).slice(-8).reverse();
     suggestionsBox.replaceChildren(...(favs.length ? [
       ...favs.map((p) => h('button', {
-        class: 'player-chip', 'data-testid': 'suggest-' + p.name,
+        class: 'player-chip is-suggest', 'data-testid': 'suggest-' + p.name,
         onclick: () => addPlayer(p.name, p),
       }, avatarEl(p), p.name, h('span', { 'aria-hidden': 'true' }, '+'))),
     ] : []));
+    suggestionsBlock.hidden = !favs.length;
   }
 
   function addPlayer(name, existing) {
@@ -194,8 +203,8 @@ export function NewSessionView() {
             class: 'btn btn-ghost', 'data-testid': 'button-add-player',
             onclick: () => addPlayer(playerInput.value),
           }, 'Ajouter')),
-        chipsBox,
-        h('div', { class: 'row', style: 'margin-top:12px' }, suggestionsBox)),
+        h('div', { class: 'chips-group is-in' }, chipsLabel, chipsBox),
+        suggestionsBlock),
       h('details', { class: 'draw-options' },
         h('summary', {}, 'Nom de la soirée'), nameInput)),
     DrawPrefsEditor(st, { collapsed: true }),

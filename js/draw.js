@@ -126,6 +126,18 @@ export function DrawPrefsEditor(st, { onChange, collapsed = false } = {}) {
   const editionsBox = h('div', { class: 'stack' });
   const countBox = h('div', { class: 'draw-count-presets', role: 'group', 'aria-label': 'Nombre de courses' });
   const info = h('p', { class: 'sub', role: 'status', 'aria-live': 'polite' });
+  const countInput = h('input', {
+    class: 'input draw-count-input', type: 'number', min: '1', max: '24', step: '1', inputmode: 'numeric',
+    'data-testid': 'input-race-count', 'aria-label': 'Nombre de courses (1 à 24)', title: 'Autre nombre (1 à 24)',
+  });
+  countInput.addEventListener('change', () => {
+    const n = Math.round(Number(countInput.value));
+    if (countInput.value === '') { refresh(); return; }
+    if (!n || n < 1 || n > 24) { toast('Entre 1 et 24 courses', 'err'); refresh(); return; }
+    prefs.count = n;
+    changed();
+  });
+  countInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') countInput.blur(); });
 
   function changed() {
     setDrawPrefs(st, prefs);
@@ -160,7 +172,10 @@ export function DrawPrefsEditor(st, { onChange, collapsed = false } = {}) {
       class: 'btn btn-sm ' + (n === prefs.count ? 'btn-primary' : 'btn-outline'),
       'aria-pressed': String(n === prefs.count), 'data-testid': 'count-' + n,
       onclick: () => { prefs.count = n; changed(); },
-    }, String(n))));
+    }, String(n))), countInput);
+    countInput.value = COUNT_PRESETS.includes(prefs.count) ? '' : prefs.count;
+    countInput.placeholder = 'Autre';
+    countInput.classList.toggle('is-custom', !COUNT_PRESETS.includes(prefs.count));
 
     editionsBox.replaceChildren(...games.filter((g) => prefs.gameIds.includes(g.id)).map((g) =>
       h('div', { class: 'stack', style: 'gap:6px' },
