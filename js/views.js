@@ -15,6 +15,7 @@ import {
 } from './engine.js';
 import { DrawPrefsEditor, startGrandPrix } from './draw.js';
 import { gpUrl, launchGp, GpView, RaceView } from './gp.js';
+import { openTv, TV_ICON } from './tv.js';
 
 export { h, GpView, RaceView };
 
@@ -228,9 +229,12 @@ export function SessionView(sessionId) {
 
   return h('div', { class: 'stack fade-in' },
     h('a', { class: 'back-link', href: '#/' }, '← Soirée'),
-    h('div', {},
-      h('h1', { class: 'page-title' }, session.name),
-      h('p', { class: 'sub' }, players.map((p) => p.name).join(', '))),
+    h('div', { class: 'page-head' },
+      h('div', {},
+        h('h1', { class: 'page-title' }, session.name),
+        h('p', { class: 'sub' }, players.map((p) => p.name).join(', '))),
+      h('button', { class: 'btn btn-outline btn-sm tv-open', 'data-testid': 'button-tv', onclick: () => openTv(session) },
+        h('span', { class: 'gp-icon', 'aria-hidden': 'true', html: TV_ICON }), 'Grand écran')),
     h('div', { class: 'card' },
       h('h2', { class: 'section-title' }, 'Classement de la soirée'),
       rankingList(session, players)),
