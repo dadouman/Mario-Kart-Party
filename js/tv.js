@@ -7,7 +7,7 @@
 import { h, avatarEl } from './ui.js';
 import { findSession, lastSession, getPlayers, refreshFromStorage } from './store.js';
 import {
-  gpStandings, gpFinished, raceComplete, raceWinners, pointsFor, sessionRanking, gpTitle, gpHighlights,
+  gpStandings, gpFinished, raceComplete, raceWinners, pointsFor, sessionRanking, gpTitle, gpHighlights, teamStandings,
 } from './engine.js';
 import { raceGame, gameStyle, gamePill, ICONS } from './race-visuals.js';
 import { factIconSvg } from './share.js';
@@ -103,7 +103,7 @@ export function TvView(sessionId) {
     }
     const players = getPlayers(session.playerIds);
     const gp = currentGp(session);
-    const signature = JSON.stringify([session.playerIds, session.grandPrix.map((g) => [g.id, g.name, g.races])]);
+    const signature = JSON.stringify([session.playerIds, session.grandPrix.map((g) => [g.id, g.name, g.races, g.teams])]);
     if (signature === lastSignature) return;
     lastSignature = signature;
     const animate = flip();
@@ -120,8 +120,8 @@ export function TvView(sessionId) {
     root.replaceChildren(controls,
       header(session, gp, players),
       finished
-        ? h('main', { class: 'tv-main is-finished' }, podium(gp, players), h('div', { class: 'tv-side' }, factsPanel(gp, players), sessionPanel(session, players)))
-        : h('main', { class: 'tv-main' }, tower(gp, players), h('div', { class: 'tv-side' }, racePanel(gp, players), sessionPanel(session, players))),
+        ? h('main', { class: 'tv-main is-finished' }, podium(gp, players), h('div', { class: 'tv-side' }, factsPanel(gp, players), teamsPanel(gp, players) || sessionPanel(session, players)))
+        : h('main', { class: 'tv-main' }, tower(gp, players), h('div', { class: 'tv-side' }, racePanel(gp, players), teamsPanel(gp, players) || sessionPanel(session, players))),
       track(gp, players));
     animate();
   }
@@ -193,12 +193,26 @@ export function TvView(sessionId) {
   }
 
   function factsPanel(gp, players) {
-    const facts = gpHighlights(gp, players).slice(0, 3);
+    const facts = gpHighlights(gp, players).filter((f) => f.key !== 'team').slice(0, 3);
     if (!facts.length) return null;
     return h('section', { class: 'tv-facts' },
-      facts.map((f) => h('div', { class: 'tv-fact is-' + f.key },
+      facts.map((f) => h('div', { class: 'tv-fact is-' + f.key, style: f.color ? '--fact:' + f.color : null },
         h('span', { class: 'tv-fact-icon', html: factIconSvg(f.key) }),
         h('span', {}, h('strong', {}, f.who || f.text), f.short ? ' ' + f.short : ''))));
+  }
+
+  // Classement des équipes de 2, à la place du classement de la soirée.
+  function teamsPanel(gp, players) {
+    const rows = teamStandings(gp, players);
+    if (!rows.length) return null;
+    return h('section', { class: 'tv-session tv-teams', 'aria-label': 'Classement des équipes', 'data-testid': 'tv-teams' },
+      h('span', { class: 'tv-label' }, 'Équipes'),
+      h('ol', {}, rows.map((r) => h('li', { 'data-pid': r.team.id, 'data-key': 'e' + r.team.id, style: '--team:' + r.team.color },
+        h('span', { class: 'tv-srank' }, String(r.rank)),
+        h('span', { class: 'team-duo' }, r.members.map((p) => avatarEl(p, 30))),
+        h('span', { class: 'tv-sname' }, r.team.name.replace('Équipe ', ''),
+          h('small', {}, r.members.map((p) => p.name).join(' & '))),
+        h('strong', {}, String(r.points))))));
   }
 
   function sessionPanel(session, players, { big = false } = {}) {

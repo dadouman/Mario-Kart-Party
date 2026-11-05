@@ -6,7 +6,7 @@
 
 import { activeGames, gameContents, newId, save, getPlayers } from './store.js';
 import { h, toast } from './ui.js';
-import { drawItems, eligibleItems, recencyMap, gpName, gpNameContext } from './engine.js';
+import { drawItems, eligibleItems, recencyMap, gpName, gpNameContext, canPlayTeams, makeTeams, teamsValid } from './engine.js';
 import { gameBadge } from './race-visuals.js';
 
 const COUNT_PRESETS = [2, 4, 6, 8];
@@ -87,9 +87,17 @@ export function startGrandPrix(st, session) {
   }
   const gp = buildGpFromItems(st, res.items);
   gp.name = gpName(Math.random, gpNameContext(session, getPlayers(session.playerIds)));
+  if (session.teamMode) gp.teams = nextTeams(session);
   session.grandPrix.push(gp);
   save();
   return gp;
+}
+
+// Équipes du prochain GP : celles du GP précédent, sinon un nouveau tirage.
+export function nextTeams(session) {
+  if (!canPlayTeams(session.playerIds.length)) return null;
+  const prev = [...session.grandPrix].reverse().find((g) => teamsValid(g.teams, session.playerIds));
+  return prev ? JSON.parse(JSON.stringify(prev.teams)) : makeTeams(session.playerIds);
 }
 
 // Tire un autre nom pour un GP existant.

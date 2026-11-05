@@ -22,13 +22,14 @@
 
 - **Trois onglets** : Soirée, Classement, Réglages.
 - **Soirée en un clic** : les joueurs de la soirée précédente sont présélectionnés, le premier Grand Prix est tiré au sort et démarre tout de suite.
-- **Tirage automatique** : jamais deux fois le même circuit dans un GP ; les circuits joués récemment deviennent moins probables, sans être interdits. Un ou plusieurs jeux, éditions et DLC au choix, 2 à 8 courses.
+- **Tirage automatique** : jamais deux fois le même circuit dans un GP ; les circuits joués récemment deviennent moins probables, sans être interdits. Un ou plusieurs jeux, éditions et DLC au choix, de 1 à 24 courses (2, 4, 6, 8 ou un nombre libre).
 - **Piste du Grand Prix** : les courses défilent sur une piste, un kart marque la course en cours et le classement reste visible dans un bandeau. Les courses saisies se rangent dans un repli.
 - **Grille des places** : on touche une place (1 à 12, ou 24 pour Mario Kart World) puis le joueur ; les cases vides sont les bots. La course s'enregistre seule quand tout le monde est placé, avec « Annuler » quelques secondes.
 - **Récap de fin de GP** : podium animé, faits marquants (roi des courses, meilleure remontée, course la plus serrée) et classement de la soirée avec les places gagnées ou perdues.
 - **Noms de Grand Prix** : chaque GP reçoit un nom tiré au sort (« Coupe des Carapaces Rancunières », « Open de Minuit », « Trophée Anti-Pauline » contre le vainqueur précédent…), à relancer d’une touche.
 - **Partage du résultat** : une carte au format story (classement, courses jouées avec leur vainqueur, faits marquants) et un message prêt à envoyer dans un groupe, qui raconte le GP avec un peu de chambrage.
 - **Mode grand écran** : un affichage plein écran façon diffusion TV (classement en direct, course à jouer, progression du GP, podium final), à ouvrir sur une télé ou une tablette. Il se met à jour tout seul pendant la saisie dans le même navigateur.
+- **Équipes de 2** : en option à la création de la soirée (nombre pair de joueurs, 4 à 12). Les duos sont tirés au sort, se réorganisent d'une touche et sont conservés d'un GP à l'autre. Les points des deux équipiers s'additionnent, avec un classement des équipes dans le bandeau, le récap, le grand écran et la carte de partage.
 - **Pas de validation** : chaque course saisie compte immédiatement au classement et reste modifiable.
 - **Tirage express** : juste une grille de circuits, sans scores ; chaque circuit se relance individuellement.
 - **Classements** : par soirée et tous temps (points, victoires, podiums), ex æquo partagés, export CSV depuis les Réglages.

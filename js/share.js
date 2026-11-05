@@ -17,14 +17,15 @@ export const FACT_ICONS = {
   last: 'M9 3h6M12 3v3M8 6h8l2 3v8l-2 3H8l-2-3V9zM10 11h4M10 15h4',
   comeback: 'M3 17l6-6 4 4 8-8M15 7h6v6',
   tight: 'M9 2h6M12 2v3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM12 9v5l3 2',
+  team: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M17 14a5 5 0 0 1 4 6',
 };
-export const FACT_COLORS = { wins: '#e9a800', last: '#e5402b', comeback: '#1d9a4d', tight: '#1597b0' };
+export const FACT_COLORS = { wins: '#e9a800', last: '#e5402b', comeback: '#1d9a4d', tight: '#1597b0', team: '#2f6fdf' };
 export const factIconSvg = (key) =>
   `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${FACT_ICONS[key] || FACT_ICONS.wins}"/></svg>`;
 
-function factBadge(ctx, key, cx, cy, size) {
+function factBadge(ctx, key, cx, cy, size, color) {
   ctx.save();
-  ctx.fillStyle = FACT_COLORS[key] || INK;
+  ctx.fillStyle = color || FACT_COLORS[key] || INK;
   ctx.beginPath(); ctx.arc(cx, cy, size / 2, 0, Math.PI * 2); ctx.fill();
   const k = (size * 0.62) / 24;
   ctx.translate(cx - 12 * k, cy - 12 * k); ctx.scale(k, k);
@@ -121,7 +122,7 @@ export async function drawShareCard({ session, gp, players }) {
   if (story.standings.length >= 3 && last.rank > 1 && story.standings.filter((r) => r.rank === last.rank).length === 1) {
     facts.push({ key: 'last', title: 'Lanterne rouge', who: last.player.name, short: 'lanterne rouge · ' + last.points + ' pts', text: last.player.name + ' · ' + last.points + ' pts' });
   }
-  const order = ['wins', 'last', 'comeback', 'tight'];
+  const order = ['team', 'wins', 'last', 'comeback', 'tight'];
   facts.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 
   const canvas = document.createElement('canvas');
@@ -267,7 +268,7 @@ export async function drawShareCard({ session, gp, players }) {
   y += 50;
   for (const f of facts) {
     if (y + 12 > limit) break;
-    factBadge(ctx, f.key, L + 26, y - 12, 54);
+    factBadge(ctx, f.key, L + 26, y - 12, 54, f.color);
     ctx.textAlign = 'left'; ctx.fillStyle = INK;
     ctx.font = `700 34px ${DISPLAY}`;
     const who = ellipsis(ctx, f.who || f.text, 360);
